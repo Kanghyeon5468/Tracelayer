@@ -1,0 +1,34 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: tracelayer-api
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "3"
+    spec:
+      serviceAccountName: tracelayer-case-api
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/tracelayer/api:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: cloud
+            - name: USE_MOCK_DATA
+              value: "false"
+            - name: SECURITY_MODE
+              value: enforcing
+            - name: GEMINI_MODEL
+              value: gemini-3.5-flash
+            - name: ALLOWED_ORIGINS
+              value: https://YOUR_DASHBOARD_DOMAIN
+            - name: PUBSUB_TOPIC_INVESTIGATIONS
+              value: tracelayer-investigations
+            - name: PUBSUB_TOPIC_APPROVALS
+              value: tracelayer-approvals
+            - name: AUDIT_LEDGER_PATH
+              value: /tmp/tracelayer-audit-ledger.jsonl
+            - name: MEMORY_BANK_PATH
+              value: /tmp/tracelayer-case-memory.jsonl

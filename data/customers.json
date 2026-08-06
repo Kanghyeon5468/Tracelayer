@@ -1,0 +1,29 @@
+[
+  {
+    "customer_id": "cus-1042",
+    "name": "Mina Park",
+    "home_country": "US",
+    "segment": "retail-premier",
+    "kyc_risk": "medium",
+    "emails": ["mina.park@example.com"],
+    "primary_account_id": "acct-7781"
+  },
+  {
+    "customer_id": "cus-4470",
+    "name": "Jonas Reed",
+    "home_country": "US",
+    "segment": "retail-standard",
+    "kyc_risk": "low",
+    "emails": ["jonas.reed@example.com"],
+    "primary_account_id": "acct-1190"
+  },
+  {
+    "customer_id": "cus-9011",
+    "name": "Avery Chen",
+    "home_country": "US",
+    "segment": "small-business",
+    "kyc_risk": "medium",
+    "emails": ["avery.chen@example.com"],
+    "primary_account_id": "acct-5528"
+  }
+]

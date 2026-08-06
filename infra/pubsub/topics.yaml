@@ -1,0 +1,11 @@
+topics:
+  - name: tracelayer-investigations
+    purpose: Dispatch investigation jobs to specialized agents.
+  - name: tracelayer-approvals
+    purpose: Request human approval for high-risk enforcement actions.
+
+subscriptions:
+  - name: tracelayer-investigation-workers
+    topic: tracelayer-investigations
+  - name: tracelayer-approval-reviewers
+    topic: tracelayer-approvals
