@@ -118,6 +118,7 @@ const loadPendingApprovals = async () => {
 
 const selectCase = async (caseId) => {
   adminState.selectedCase = await apiFetch(`/cases/${caseId}`);
+  localStorage.setItem("tracelayer.currentCaseId", caseId);
   renderSelectedCase();
 };
 
@@ -138,6 +139,7 @@ const decideApproval = async (approval, decision) => {
   });
 
   adminState.selectedCase = updatedCase;
+  localStorage.setItem("tracelayer.currentCaseId", updatedCase.case_id);
   setText("#last-action", `${titleCase(decision)} ${approval.case_id}`);
   renderSelectedCase();
   await loadPendingApprovals();

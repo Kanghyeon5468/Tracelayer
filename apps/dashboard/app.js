@@ -138,12 +138,29 @@ const API_BASE_URL =
   localStorage.getItem("tracelayer.apiBaseUrl") ||
   inferredApiBaseUrl;
 
+let currentCaseId = localStorage.getItem("tracelayer.currentCaseId") || fallbackCase.case_id;
+
 const titleCase = (value) =>
   String(value)
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const apiHeaders = () => {
+  const headers = {
+    "X-Tracelayer-User": localStorage.getItem("tracelayer.supervisorId") || "supervisor@example.com",
+    "X-Tracelayer-Role": "supervisor",
+  };
+  const apiKey = localStorage.getItem("tracelayer.apiKey");
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey;
+  }
+  return headers;
+};
+
 const renderCase = (caseData) => {
+  currentCaseId = caseData.case_id;
+  localStorage.setItem("tracelayer.currentCaseId", currentCaseId);
+
   document.querySelector("#case-id").textContent = caseData.case_id;
   document.querySelector("#case-status").textContent = titleCase(caseData.status);
   document.querySelector("#risk-score").textContent = caseData.risk_score;
@@ -239,6 +256,11 @@ const renderCase = (caseData) => {
       <strong>${titleCase(approval.status)}</strong>
       <p>${titleCase(approval.action)}</p>
       <p>${approval.reason}</p>
+      ${
+        approval.decision_reason
+          ? `<p><strong>Decision reason</strong> ${approval.decision_reason}</p>`
+          : ""
+      }
     `
     : "<p>No approval request has been created.</p>";
 };
@@ -263,7 +285,10 @@ const runDemo = async () => {
   button.textContent = "Running...";
 
   try {
-    const response = await fetch(`${API_BASE_URL}/cases/demo`, { method: "POST" });
+    const response = await fetch(`${API_BASE_URL}/cases/demo`, {
+      method: "POST",
+      headers: apiHeaders(),
+    });
     if (!response.ok) {
       throw new Error(`API returned ${response.status}`);
     }
@@ -276,6 +301,36 @@ const runDemo = async () => {
   }
 };
 
+const refreshCase = async ({ silent = false } = {}) => {
+  const button = document.querySelector("#refresh-case");
+  if (!silent) {
+    button.disabled = true;
+    button.textContent = "Refreshing";
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/cases/${currentCaseId}`, {
+      headers: apiHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    renderCase(await response.json());
+  } catch (error) {
+    if (!silent) {
+      renderCase(fallbackCase);
+    }
+  } finally {
+    if (!silent) {
+      button.disabled = false;
+      button.textContent = "Refresh Case";
+    }
+  }
+};
+
 document.querySelector("#run-demo").addEventListener("click", runDemo);
+document.querySelector("#refresh-case").addEventListener("click", () => refreshCase());
 renderCase(fallbackCase);
 loadRuntimeConfig();
+refreshCase({ silent: true });
+window.setInterval(() => refreshCase({ silent: true }), 7000);
