@@ -10,6 +10,7 @@ const adminState = {
   apiKey: localStorage.getItem("tracelayer.apiKey") || "",
   supervisorId: localStorage.getItem("tracelayer.supervisorId") || "supervisor@example.com",
   pendingApprovals: [],
+  approvalLog: [],
   selectedCase: null,
 };
 const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("tracelayer-live") : null;
@@ -69,6 +70,7 @@ const saveSettings = () => {
   setText("#last-action", "Settings Saved");
   loadRuntimeConfig();
   loadPendingApprovals();
+  loadApprovalLog();
 };
 
 const apiFetch = async (path, options = {}) => {
@@ -128,6 +130,21 @@ const loadPendingApprovals = async () => {
   }
 };
 
+const loadApprovalLog = async () => {
+  try {
+    adminState.approvalLog = await apiFetch("/approvals/log");
+    renderApprovalLog();
+    updateSummary();
+  } catch (error) {
+    renderApprovalLogError(error);
+  }
+};
+
+const refreshAdminData = async () => {
+  await loadPendingApprovals();
+  await loadApprovalLog();
+};
+
 const selectCase = async (caseId) => {
   adminState.selectedCase = await apiFetch(`/cases/${caseId}`);
   localStorage.setItem("tracelayer.currentCaseId", caseId);
@@ -157,6 +174,7 @@ const decideApproval = async (approval, decision) => {
   setText("#last-action", `${titleCase(decision)} ${approval.case_id}`);
   renderSelectedCase();
   await loadPendingApprovals();
+  await loadApprovalLog();
 };
 
 const renderApprovalQueue = () => {
@@ -239,6 +257,12 @@ const renderSelectedCase = () => {
   approvalBox.appendChild(
     createNode("p", "", approval ? `${titleCase(approval.action)}: ${approval.reason}` : ""),
   );
+  if (approval?.decision_reason) {
+    approvalBox.appendChild(createNode("p", "", `Decision: ${approval.decision_reason}`));
+  }
+  if (approval?.decided_by) {
+    approvalBox.appendChild(createNode("p", "", `Reviewer: ${approval.decided_by}`));
+  }
 
   const evidence = createNode("div", "compact-list");
   caseData.evidence_timeline.slice(0, 4).forEach((event) => {
@@ -253,6 +277,9 @@ const renderSelectedCase = () => {
 
 const updateSummary = () => {
   const pendingCount = adminState.pendingApprovals.length;
+  const completedCount = adminState.approvalLog.filter((entry) =>
+    ["approved", "denied"].includes(entry.approval_status),
+  ).length;
   const highestRisk = adminState.pendingApprovals.reduce(
     (max, approval) => Math.max(max, approval.risk_score),
     0,
@@ -260,6 +287,9 @@ const updateSummary = () => {
 
   setText("#pending-count", String(pendingCount));
   setText("#highest-risk", pendingCount ? String(highestRisk) : "-");
+  if (completedCount && document.querySelector("#last-action").textContent === "None") {
+    setText("#last-action", `${completedCount} Decisions`);
+  }
 };
 
 const renderError = (error) => {
@@ -273,17 +303,74 @@ const renderError = (error) => {
   setText("#highest-risk", "-");
 };
 
+const renderApprovalLog = () => {
+  const log = document.querySelector("#approval-log");
+  clearChildren(log);
+
+  if (!adminState.approvalLog.length) {
+    const empty = createNode("div", "empty-state");
+    empty.appendChild(createNode("strong", "", "No approval activity"));
+    empty.appendChild(createNode("p", "", "Run demo cases and decide approvals to build this log."));
+    log.appendChild(empty);
+    return;
+  }
+
+  adminState.approvalLog.forEach((entry) => {
+    const row = createNode("article", `log-row ${entry.approval_status}`);
+    const status = createNode("span", `status-pill ${entry.approval_status}`, titleCase(entry.approval_status));
+    const body = createNode("div", "log-row-body");
+    body.appendChild(createNode("strong", "", entry.case_id));
+    body.appendChild(
+      createNode(
+        "p",
+        "",
+        `${titleCase(entry.action)} · ${titleCase(entry.case_status)} · Risk ${entry.risk_score}`,
+      ),
+    );
+    body.appendChild(
+      createNode(
+        "p",
+        "muted-line",
+        entry.decision_reason || entry.reason,
+      ),
+    );
+
+    const meta = createNode("div", "log-meta");
+    meta.appendChild(status);
+    meta.appendChild(
+      createNode(
+        "span",
+        "",
+        entry.decided_at
+          ? `Decided ${new Date(entry.decided_at).toLocaleString()}`
+          : `Created ${new Date(entry.created_at).toLocaleString()}`,
+      ),
+    );
+
+    row.append(body, meta);
+    row.addEventListener("click", () => selectCase(entry.case_id));
+    log.appendChild(row);
+  });
+};
+
+const renderApprovalLogError = (error) => {
+  const log = document.querySelector("#approval-log");
+  clearChildren(log);
+  const errorBox = createNode("div", "empty-state error-state");
+  errorBox.appendChild(createNode("strong", "", "Unable to load approval log"));
+  errorBox.appendChild(createNode("p", "", error.message));
+  log.appendChild(errorBox);
+};
+
 document.querySelector("#save-settings").addEventListener("click", saveSettings);
-document.querySelector("#refresh-approvals").addEventListener("click", loadPendingApprovals);
+document.querySelector("#refresh-approvals").addEventListener("click", refreshAdminData);
 
 liveChannel?.addEventListener("message", (event) => {
   if (event.data?.type !== "case.updated") {
     return;
   }
-  const caseData = event.data.case;
-  if (caseData?.approval_request?.status === "pending") {
-    loadPendingApprovals();
-  }
+  loadPendingApprovals();
+  loadApprovalLog();
 });
 
 applySettingsToForm();
@@ -291,3 +378,4 @@ renderApprovalQueue();
 renderSelectedCase();
 loadRuntimeConfig();
 loadPendingApprovals();
+loadApprovalLog();

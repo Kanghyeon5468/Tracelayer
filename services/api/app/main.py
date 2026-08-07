@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.domain.models import (
     AgentIdentity,
     ApprovalDecisionRequest,
+    ApprovalLogEntry,
     AuditEvent,
     InvestigationCase,
     InvestigationRequest,
@@ -89,7 +90,13 @@ def list_agents(request: RequestContext = Depends(get_request_context)) -> list[
 
 @app.post("/cases/demo", response_model=InvestigationCase)
 def run_demo_case(request: RequestContext = Depends(get_request_context)) -> InvestigationCase:
-    case = _run_or_raise(lambda: FraudInvestigationFleet(settings).investigate("tx-9001", request))
+    case = _run_or_raise(
+        lambda: FraudInvestigationFleet(settings).investigate(
+            "tx-9001",
+            request,
+            create_case_run=True,
+        )
+    )
     return redact_case_for_role(case, request.role)
 
 
@@ -121,6 +128,13 @@ def list_pending_approvals(
     request: RequestContext = Depends(get_request_context),
 ) -> list[PendingApprovalSummary]:
     return _run_or_raise(lambda: FraudInvestigationFleet(settings).list_pending_approvals(request))
+
+
+@app.get("/approvals/log", response_model=list[ApprovalLogEntry])
+def list_approval_log(
+    request: RequestContext = Depends(get_request_context),
+) -> list[ApprovalLogEntry]:
+    return _run_or_raise(lambda: FraudInvestigationFleet(settings).list_approval_log(request))
 
 
 @app.post("/cases/{case_id}/approval", response_model=InvestigationCase)

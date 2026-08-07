@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from app.agents import (
     AgentRegistry,
@@ -17,6 +18,7 @@ from app.connectors.report_writer import ReportWriter
 from app.connectors.repository import InvestigationRepository
 from app.domain.models import (
     ApprovalDecisionRequest,
+    ApprovalLogEntry,
     CaseStatus,
     InvestigationCase,
     InvestigationContext,
@@ -64,6 +66,7 @@ class FraudInvestigationFleet:
         self,
         transaction_id: str,
         request: RequestContext | None = None,
+        create_case_run: bool = False,
     ) -> InvestigationCase:
         request = request or build_service_context()
         actor_decision = self.policy_engine.actor_can(request, "cases.investigate")
@@ -81,8 +84,12 @@ class FraudInvestigationFleet:
         customer = self.repository.get_customer(trigger.customer_id)
         related_transactions = self.repository.find_related_transactions(trigger)
 
+        case_id = f"case-{trigger.transaction_id}"
+        if create_case_run:
+            case_id = f"{case_id}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}-{uuid4().hex[:6]}"
+
         context = InvestigationContext(
-            case_id=f"case-{trigger.transaction_id}",
+            case_id=case_id,
             trigger_transaction=trigger,
             customer=customer,
             related_transactions=related_transactions,
@@ -213,6 +220,50 @@ class FraudInvestigationFleet:
             )
         return summaries
 
+    def list_approval_log(
+        self,
+        request: RequestContext | None = None,
+    ) -> list[ApprovalLogEntry]:
+        request = request or build_service_context()
+        actor_decision = self.policy_engine.actor_can(request, "approvals.decide")
+        self.audit_ledger.record(
+            request=request,
+            action="approvals.list_log",
+            resource="approval-log",
+            decision="allow" if actor_decision.allowed else "deny",
+            reason=actor_decision.reason,
+        )
+        if not actor_decision.allowed:
+            raise PermissionError(actor_decision.reason)
+
+        log_entries: list[ApprovalLogEntry] = []
+        for case in self.memory_bank.list_cases():
+            if not case.approval_request:
+                continue
+            approval = case.approval_request
+            log_entries.append(
+                ApprovalLogEntry(
+                    case_id=case.case_id,
+                    approval_id=approval.approval_id,
+                    approval_status=approval.status,
+                    case_status=case.status,
+                    action=approval.action,
+                    reason=approval.reason,
+                    risk_score=case.risk_score,
+                    priority=case.priority,
+                    trigger_transaction_id=case.trigger_transaction_id,
+                    customer_id=case.customer_id,
+                    requested_by_agent_id=approval.requested_by_agent_id,
+                    decided_by=approval.decided_by,
+                    decision_reason=approval.decision_reason,
+                    decided_at=approval.decided_at,
+                    created_at=case.created_at,
+                    updated_at=case.updated_at,
+                    memory_snapshot_id=case.memory_snapshot_id,
+                )
+            )
+        return log_entries
+
     def decide_approval(
         self,
         case_id: str,
@@ -255,6 +306,7 @@ class FraudInvestigationFleet:
             update={
                 "approval_request": approval,
                 "status": updated_status,
+                "updated_at": datetime.now(UTC),
             }
         )
         report_path = self.report_writer.path_for(updated_case.case_id)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -133,6 +133,26 @@ class PendingApprovalSummary(BaseModel):
     memory_snapshot_id: str | None = None
 
 
+class ApprovalLogEntry(BaseModel):
+    case_id: str
+    approval_id: str
+    approval_status: str
+    case_status: CaseStatus
+    action: str
+    reason: str
+    risk_score: int
+    priority: Priority
+    trigger_transaction_id: str
+    customer_id: str
+    requested_by_agent_id: str
+    decided_by: str | None = None
+    decision_reason: str | None = None
+    decided_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    memory_snapshot_id: str | None = None
+
+
 class RequestContext(BaseModel):
     actor_id: str
     role: ActorRole
@@ -217,3 +237,5 @@ class InvestigationCase(BaseModel):
     federated_risk_signal: FederatedRiskSignal | None = None
     memory_snapshot_id: str | None = None
     audit_chain_tip: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

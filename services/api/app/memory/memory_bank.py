@@ -46,6 +46,17 @@ class MemoryBank:
         return case.model_copy(update={"memory_snapshot_id": latest["snapshot_id"]})
 
     def list_pending_approval_cases(self) -> list[InvestigationCase]:
+        pending_cases: list[InvestigationCase] = []
+        for case in self.list_cases():
+            if case.status != "needs_approval" or not case.approval_request:
+                continue
+            if case.approval_request.status != "pending":
+                continue
+            pending_cases.append(case)
+
+        return sorted(pending_cases, key=lambda case: case.risk_score, reverse=True)
+
+    def list_cases(self) -> list[InvestigationCase]:
         latest_by_case: dict[str, dict] = {}
         if not self.memory_path.exists():
             return []
@@ -55,18 +66,12 @@ class MemoryBank:
                 payload = json.loads(line)
                 latest_by_case[payload["case"]["case_id"]] = payload
 
-        pending_cases: list[InvestigationCase] = []
+        cases: list[InvestigationCase] = []
         for payload in latest_by_case.values():
-            case_payload = payload["case"]
-            approval = case_payload.get("approval_request")
-            if case_payload.get("status") != "needs_approval" or not approval:
-                continue
-            if approval.get("status") != "pending":
-                continue
-            case = InvestigationCase.model_validate(case_payload)
-            pending_cases.append(case.model_copy(update={"memory_snapshot_id": payload["snapshot_id"]}))
+            case = InvestigationCase.model_validate(payload["case"])
+            cases.append(case.model_copy(update={"memory_snapshot_id": payload["snapshot_id"]}))
 
-        return sorted(pending_cases, key=lambda case: case.risk_score, reverse=True)
+        return sorted(cases, key=lambda case: case.updated_at, reverse=True)
 
     @staticmethod
     def _resolve_memory_path(settings: Settings) -> Path:
@@ -110,6 +115,7 @@ class FirestoreMemoryBank:
                 "case_id": case.case_id,
                 "latest_snapshot_id": snapshot_id,
                 "updated_at": now,
+                "created_at": case.created_at.isoformat().replace("+00:00", "Z"),
                 "status": str(case.status),
                 "priority": str(case.priority),
                 "risk_score": case.risk_score,
@@ -153,6 +159,18 @@ class FirestoreMemoryBank:
             )
 
         return sorted(pending_cases, key=lambda case: case.risk_score, reverse=True)
+
+    def list_cases(self) -> list[InvestigationCase]:
+        cases: list[InvestigationCase] = []
+        for document in self.client.collection(self.collection_name).stream():
+            payload = document.to_dict() or {}
+            case_payload = payload.get("case")
+            if not case_payload:
+                continue
+            case = InvestigationCase.model_validate(case_payload)
+            cases.append(case.model_copy(update={"memory_snapshot_id": payload.get("latest_snapshot_id")}))
+
+        return sorted(cases, key=lambda case: case.updated_at, reverse=True)
 
     @staticmethod
     def _build_client(settings: Settings):

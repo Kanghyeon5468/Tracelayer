@@ -29,6 +29,22 @@ def test_demo_case_requires_human_approval() -> None:
     assert fleet.audit_ledger.verify_chain()
 
 
+def test_demo_runs_can_create_distinct_case_records(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    first_case = fleet.investigate("tx-9001", create_case_run=True)
+    second_case = fleet.investigate("tx-9001", create_case_run=True)
+    approval_log = fleet.list_approval_log()
+
+    assert first_case.case_id.startswith("case-tx-9001-")
+    assert second_case.case_id.startswith("case-tx-9001-")
+    assert first_case.case_id != second_case.case_id
+    assert {entry.case_id for entry in approval_log} == {
+        first_case.case_id,
+        second_case.case_id,
+    }
+
+
 def test_viewer_cannot_start_investigation(tmp_path: Path) -> None:
     fleet = _test_fleet(tmp_path)
     viewer = RequestContext(
@@ -114,6 +130,44 @@ def test_approval_decision_removes_case_from_pending_list(tmp_path: Path) -> Non
     assert fleet.list_pending_approvals(supervisor) == []
 
 
+def test_approval_log_retains_approved_and_denied_decisions(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+    supervisor = RequestContext(
+        actor_id="supervisor@example.com",
+        role=ActorRole.SUPERVISOR,
+        request_id="req-test-supervisor-history",
+    )
+
+    approved_case = fleet.investigate("tx-9001", supervisor, create_case_run=True)
+    denied_case = fleet.investigate("tx-9001", supervisor, create_case_run=True)
+
+    fleet.decide_approval(
+        approved_case.case_id,
+        ApprovalDecisionRequest(
+            approval_id=approved_case.approval_request.approval_id,
+            decision="approved",
+            reason="Approved in history test.",
+        ),
+        supervisor,
+    )
+    fleet.decide_approval(
+        denied_case.case_id,
+        ApprovalDecisionRequest(
+            approval_id=denied_case.approval_request.approval_id,
+            decision="denied",
+            reason="Denied in history test.",
+        ),
+        supervisor,
+    )
+
+    log_by_case = {entry.case_id: entry for entry in fleet.list_approval_log(supervisor)}
+
+    assert log_by_case[approved_case.case_id].approval_status == "approved"
+    assert log_by_case[approved_case.case_id].case_status == "closed"
+    assert log_by_case[denied_case.case_id].approval_status == "denied"
+    assert log_by_case[denied_case.case_id].case_status == "open"
+
+
 def test_viewer_case_response_is_redacted(tmp_path: Path) -> None:
     fleet = _test_fleet(tmp_path)
     case = fleet.investigate("tx-9001")
@@ -190,6 +244,11 @@ class FakeCollectionRef:
 
     def where(self, field: str, operator: str, value: str) -> "FakeQuery":
         return FakeQuery(self.documents.values(), field, operator, value)
+
+    def stream(self):
+        for document in self.documents.values():
+            if document.payload is not None:
+                yield FakeSnapshot(document.payload)
 
 
 class FakeDocumentRef:

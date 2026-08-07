@@ -295,10 +295,15 @@ label {
 }
 
 .approval-queue,
+.approval-log,
 .selected-case,
 .compact-list {
   display: grid;
   gap: 12px;
+}
+
+.admin-history-panel {
+  grid-column: 1 / -1;
 }
 
 .approval-row {
@@ -308,6 +313,68 @@ label {
   align-items: center;
   border-top: 1px solid var(--line);
   padding-top: 12px;
+}
+
+.log-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  cursor: pointer;
+}
+
+.log-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.log-row-body {
+  min-width: 0;
+}
+
+.log-row-body p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.log-meta {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.status-pill {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: #eef4f8;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.status-pill.pending {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.status-pill.approved {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.status-pill.denied {
+  background: #fff1f3;
+  color: #b42318;
 }
 
 .approval-row:first-child {
@@ -424,7 +491,8 @@ label {
 
   .admin-controls,
   .admin-layout,
-  .approval-row {
+  .approval-row,
+  .log-row {
     grid-template-columns: 1fr;
   }
 
@@ -439,5 +507,10 @@ label {
 
   .approval-actions button {
     flex: 1 1 86px;
+  }
+
+  .log-meta {
+    justify-items: start;
+    text-align: left;
   }
 }
