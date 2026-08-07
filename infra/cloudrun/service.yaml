@@ -8,9 +8,9 @@ spec:
       annotations:
         autoscaling.knative.dev/maxScale: "3"
     spec:
-      serviceAccountName: tracelayer-case-api
+      serviceAccountName: tracelayer-agent@PROJECT_ID.iam.gserviceaccount.com
       containers:
-        - image: REGION-docker.pkg.dev/PROJECT_ID/tracelayer/api:latest
+        - image: us-central1-docker.pkg.dev/PROJECT_ID/tracelayer/api:latest
           ports:
             - containerPort: 8080
           env:

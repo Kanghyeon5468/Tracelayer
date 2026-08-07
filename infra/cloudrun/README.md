@@ -16,7 +16,7 @@ The current service manifest is a deployment stub. For the hackathon demo, show 
 ```bash
 PROJECT_ID=project-6ecbea1e-e0c3-4325-a63
 REGION=us-central1
-IMAGE=gcr.io/$PROJECT_ID/tracelayer-api:latest
+IMAGE=$REGION-docker.pkg.dev/$PROJECT_ID/tracelayer/api:latest
 
 gcloud builds submit \
   --config infra/cloudrun/cloudbuild.yaml \
@@ -25,8 +25,24 @@ gcloud builds submit \
 gcloud run deploy tracelayer-api \
   --image $IMAGE \
   --region $REGION \
-  --allow-unauthenticated \
-  --set-env-vars APP_ENV=cloud,AI_PROVIDER=vertex_ai,GEMINI_MODEL=gemini-2.5-flash,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=$REGION,SECURITY_MODE=permissive
+  --service-account tracelayer-agent@$PROJECT_ID.iam.gserviceaccount.com \
+  --no-allow-unauthenticated \
+  --set-env-vars APP_ENV=cloud,AI_PROVIDER=vertex_ai,GEMINI_MODEL=gemini-2.5-flash,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=$REGION,SECURITY_MODE=enforcing,DEMO_ANALYST_API_KEY=local-demo-key
+```
+
+Authenticated smoke test:
+
+```bash
+TOKEN=$(gcloud auth print-identity-token)
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  https://tracelayer-api-235426782310.us-central1.run.app/runtime/config
+
+curl -s -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-API-Key: local-demo-key" \
+  -H "X-Tracelayer-Role: supervisor" \
+  https://tracelayer-api-235426782310.us-central1.run.app/cases/demo
 ```
 
 ## Production Changes
