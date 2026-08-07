@@ -12,6 +12,7 @@ const adminState = {
   pendingApprovals: [],
   selectedCase: null,
 };
+const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("tracelayer-live") : null;
 
 const titleCase = (value) =>
   String(value || "")
@@ -87,6 +88,17 @@ const apiFetch = async (path, options = {}) => {
   return response.json();
 };
 
+const publishCaseUpdate = (caseData, source) => {
+  const event = {
+    type: "case.updated",
+    source,
+    case: caseData,
+    sent_at: new Date().toISOString(),
+  };
+  liveChannel?.postMessage(event);
+  localStorage.setItem("tracelayer.liveCaseEvent", JSON.stringify(event));
+};
+
 const loadRuntimeConfig = async () => {
   try {
     const config = await apiFetch("/runtime/config");
@@ -119,6 +131,7 @@ const loadPendingApprovals = async () => {
 const selectCase = async (caseId) => {
   adminState.selectedCase = await apiFetch(`/cases/${caseId}`);
   localStorage.setItem("tracelayer.currentCaseId", caseId);
+  publishCaseUpdate(adminState.selectedCase, "admin.select_case");
   renderSelectedCase();
 };
 
@@ -140,6 +153,7 @@ const decideApproval = async (approval, decision) => {
 
   adminState.selectedCase = updatedCase;
   localStorage.setItem("tracelayer.currentCaseId", updatedCase.case_id);
+  publishCaseUpdate(updatedCase, `admin.${decision}`);
   setText("#last-action", `${titleCase(decision)} ${approval.case_id}`);
   renderSelectedCase();
   await loadPendingApprovals();
@@ -261,6 +275,16 @@ const renderError = (error) => {
 
 document.querySelector("#save-settings").addEventListener("click", saveSettings);
 document.querySelector("#refresh-approvals").addEventListener("click", loadPendingApprovals);
+
+liveChannel?.addEventListener("message", (event) => {
+  if (event.data?.type !== "case.updated") {
+    return;
+  }
+  const caseData = event.data.case;
+  if (caseData?.approval_request?.status === "pending") {
+    loadPendingApprovals();
+  }
+});
 
 applySettingsToForm();
 renderApprovalQueue();

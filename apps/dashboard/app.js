@@ -139,6 +139,7 @@ const API_BASE_URL =
   inferredApiBaseUrl;
 
 let currentCaseId = localStorage.getItem("tracelayer.currentCaseId") || fallbackCase.case_id;
+const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("tracelayer-live") : null;
 
 const titleCase = (value) =>
   String(value)
@@ -155,6 +156,37 @@ const apiHeaders = () => {
     headers["X-API-Key"] = apiKey;
   }
   return headers;
+};
+
+const setLiveStatus = (message) => {
+  const status = document.querySelector("#runtime-status");
+  if (!status) {
+    return;
+  }
+  status.dataset.liveStatus = message;
+  if (status.textContent.includes("Backend:")) {
+    const [backend] = status.textContent.split(" · ");
+    status.textContent = `${backend} · ${message}`;
+  }
+};
+
+const publishCaseUpdate = (caseData, source) => {
+  const event = {
+    type: "case.updated",
+    source,
+    case: caseData,
+    sent_at: new Date().toISOString(),
+  };
+  liveChannel?.postMessage(event);
+  localStorage.setItem("tracelayer.liveCaseEvent", JSON.stringify(event));
+};
+
+const applyLiveCaseUpdate = (caseData) => {
+  if (!caseData) {
+    return;
+  }
+  renderCase(caseData);
+  setLiveStatus(`Live sync: ${new Date().toLocaleTimeString()}`);
 };
 
 const renderCase = (caseData) => {
@@ -273,7 +305,8 @@ const loadRuntimeConfig = async () => {
       throw new Error(`API returned ${response.status}`);
     }
     const config = await response.json();
-    status.textContent = `Backend: ${config.ai_provider} / ${config.gemini_model}`;
+    const live = status.dataset.liveStatus || "Live sync: ready";
+    status.textContent = `Backend: ${config.ai_provider} / ${config.gemini_model} · ${live}`;
   } catch (error) {
     status.textContent = "Backend: local fallback";
   }
@@ -292,7 +325,9 @@ const runDemo = async () => {
     if (!response.ok) {
       throw new Error(`API returned ${response.status}`);
     }
-    renderCase(await response.json());
+    const caseData = await response.json();
+    renderCase(caseData);
+    publishCaseUpdate(caseData, "dashboard.run_demo");
   } catch (error) {
     renderCase(fallbackCase);
   } finally {
@@ -301,13 +336,7 @@ const runDemo = async () => {
   }
 };
 
-const refreshCase = async ({ silent = false } = {}) => {
-  const button = document.querySelector("#refresh-case");
-  if (!silent) {
-    button.disabled = true;
-    button.textContent = "Refreshing";
-  }
-
+const loadCurrentCase = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/cases/${currentCaseId}`, {
       headers: apiHeaders(),
@@ -317,20 +346,31 @@ const refreshCase = async ({ silent = false } = {}) => {
     }
     renderCase(await response.json());
   } catch (error) {
-    if (!silent) {
-      renderCase(fallbackCase);
-    }
-  } finally {
-    if (!silent) {
-      button.disabled = false;
-      button.textContent = "Refresh Case";
-    }
+    renderCase(fallbackCase);
   }
 };
 
+liveChannel?.addEventListener("message", (event) => {
+  if (event.data?.type === "case.updated") {
+    applyLiveCaseUpdate(event.data.case);
+  }
+});
+
+window.addEventListener("storage", (event) => {
+  if (event.key !== "tracelayer.liveCaseEvent" || !event.newValue) {
+    return;
+  }
+  try {
+    const liveEvent = JSON.parse(event.newValue);
+    if (liveEvent.type === "case.updated") {
+      applyLiveCaseUpdate(liveEvent.case);
+    }
+  } catch (error) {
+    setLiveStatus("Live sync: event skipped");
+  }
+});
+
 document.querySelector("#run-demo").addEventListener("click", runDemo);
-document.querySelector("#refresh-case").addEventListener("click", () => refreshCase());
 renderCase(fallbackCase);
 loadRuntimeConfig();
-refreshCase({ silent: true });
-window.setInterval(() => refreshCase({ silent: true }), 7000);
+loadCurrentCase();
