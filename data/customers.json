@@ -25,5 +25,23 @@
     "kyc_risk": "medium",
     "emails": ["avery.chen@example.com"],
     "primary_account_id": "acct-5528"
+  },
+  {
+    "customer_id": "cus-1207",
+    "name": "Lena Morales",
+    "home_country": "US",
+    "segment": "retail-standard",
+    "kyc_risk": "low",
+    "emails": ["lena.morales@example.com"],
+    "primary_account_id": "acct-3308"
+  },
+  {
+    "customer_id": "cus-7715",
+    "name": "Northline Studio",
+    "home_country": "US",
+    "segment": "small-business",
+    "kyc_risk": "medium",
+    "emails": ["ops@northlinestudio.example"],
+    "primary_account_id": "acct-6642"
   }
 ]

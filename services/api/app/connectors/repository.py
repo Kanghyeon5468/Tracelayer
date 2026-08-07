@@ -26,6 +26,13 @@ class InvestigationRepository:
                 return customer
         raise KeyError(f"Customer not found: {customer_id}")
 
+    def list_demo_transaction_ids(self) -> list[str]:
+        return sorted(
+            transaction.transaction_id
+            for transaction in self._transactions
+            if transaction.status == "flagged"
+        )
+
     def find_related_transactions(self, transaction: Transaction) -> list[Transaction]:
         related: list[Transaction] = []
         for candidate in self._transactions:

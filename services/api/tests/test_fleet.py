@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from app.config import Settings
+from app.connectors.repository import InvestigationRepository
 from app.connectors.report_writer import ReportWriter
+import app.fleet as fleet_module
 from app.fleet import FraudInvestigationFleet
 from app.federation.secure_agg import secure_aggregate
 from app.memory.memory_bank import FirestoreMemoryBank, MemoryBank
@@ -43,6 +45,21 @@ def test_demo_runs_can_create_distinct_case_records(tmp_path: Path) -> None:
         first_case.case_id,
         second_case.case_id,
     }
+
+
+def test_random_demo_uses_flagged_demo_transactions(tmp_path: Path, monkeypatch) -> None:
+    fleet = _test_fleet(tmp_path)
+    demo_ids = InvestigationRepository().list_demo_transaction_ids()
+
+    assert {"tx-9001", "tx-9101", "tx-9201"}.issubset(set(demo_ids))
+
+    monkeypatch.setattr(fleet_module.random, "choice", lambda values: "tx-9201")
+    case = fleet.investigate_random_demo()
+
+    assert case.trigger_transaction_id == "tx-9201"
+    assert case.case_id.startswith("case-tx-9201-")
+    assert case.approval_request is not None
+    assert case.risk_score >= 70
 
 
 def test_viewer_cannot_start_investigation(tmp_path: Path) -> None:

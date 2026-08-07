@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -164,6 +165,19 @@ class FraudInvestigationFleet:
         case = case.model_copy(update={"audit_chain_tip": final_event.event_hash})
         self.report_writer.write_markdown(case)
         return case
+
+    def investigate_random_demo(
+        self,
+        request: RequestContext | None = None,
+    ) -> InvestigationCase:
+        transaction_ids = self.repository.list_demo_transaction_ids()
+        if not transaction_ids:
+            raise ValueError("No flagged demo transactions are configured.")
+        return self.investigate(
+            random.choice(transaction_ids),
+            request,
+            create_case_run=True,
+        )
 
     def get_case(self, case_id: str, request: RequestContext | None = None) -> InvestigationCase:
         request = request or build_service_context()

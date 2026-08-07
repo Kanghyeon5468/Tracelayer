@@ -90,13 +90,7 @@ def list_agents(request: RequestContext = Depends(get_request_context)) -> list[
 
 @app.post("/cases/demo", response_model=InvestigationCase)
 def run_demo_case(request: RequestContext = Depends(get_request_context)) -> InvestigationCase:
-    case = _run_or_raise(
-        lambda: FraudInvestigationFleet(settings).investigate(
-            "tx-9001",
-            request,
-            create_case_run=True,
-        )
-    )
+    case = _run_or_raise(lambda: FraudInvestigationFleet(settings).investigate_random_demo(request))
     return redact_case_for_role(case, request.role)
 
 
