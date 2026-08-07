@@ -8,9 +8,9 @@
 
 ## Week 2: Google Cloud Integration
 
-- Deploy API to Cloud Run.
+- Deploy API to Cloud Run. Completed for the current authenticated demo service.
 - Create Pub/Sub topics and worker subscriptions.
-- Move case memory to Firestore.
+- Move case memory to Firestore. Implemented as `FirestoreMemoryBank`; production hardening remains.
 - Move related transaction search to BigQuery.
 - Add Vertex AI Gemini calls behind guardrail hooks.
 

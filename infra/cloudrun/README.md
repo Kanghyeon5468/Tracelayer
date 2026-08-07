@@ -1,6 +1,6 @@
 # Cloud Run Deployment Notes
 
-The current service manifest is a deployment stub. For the hackathon demo, show the Cloud Run service, logs, and environment variables to prove the backend is running on Google Cloud.
+The service manifest deploys the FastAPI backend to Cloud Run with backend-only Vertex AI calls and Firestore-backed case memory. For the hackathon demo, show the Cloud Run service, logs, Firestore documents, and environment variables to prove the backend is running on Google Cloud.
 
 ## Recommended Flow
 
@@ -9,7 +9,8 @@ The current service manifest is a deployment stub. For the hackathon demo, show 
 3. Deploy `tracelayer-api` with a dedicated service account.
 4. Set `SECURITY_MODE=enforcing`.
 5. Prefer `AI_PROVIDER=vertex_ai` with the Cloud Run service account.
-6. Store any API keys in Secret Manager instead of plain environment variables.
+6. Set `MEMORY_BACKEND=firestore` so human approval decisions survive container restarts.
+7. Store any API keys in Secret Manager instead of plain environment variables.
 
 ## Current Command Shape
 
@@ -27,7 +28,7 @@ gcloud run deploy tracelayer-api \
   --region $REGION \
   --service-account tracelayer-agent@$PROJECT_ID.iam.gserviceaccount.com \
   --no-allow-unauthenticated \
-  --set-env-vars APP_ENV=cloud,AI_PROVIDER=vertex_ai,GEMINI_MODEL=gemini-2.5-flash,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=$REGION,SECURITY_MODE=enforcing,DEMO_ANALYST_API_KEY=local-demo-key
+  --set-env-vars APP_ENV=cloud,USE_MOCK_DATA=true,AI_PROVIDER=vertex_ai,GEMINI_MODEL=gemini-2.5-flash,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=$REGION,SECURITY_MODE=enforcing,DEMO_ANALYST_API_KEY=local-demo-key,MEMORY_BACKEND=firestore,FIRESTORE_DATABASE='(default)',FIRESTORE_CASE_COLLECTION=tracelayer_cases
 ```
 
 Authenticated smoke test:
@@ -47,7 +48,7 @@ curl -s -X POST \
 
 ## Production Changes
 
-- Replace local file memory with Firestore.
+- Move API keys to Secret Manager.
 - Export audit events to Cloud Logging and BigQuery.
 - Use Pub/Sub push or pull workers for long-running agent tasks.
 - Route Gemini calls through Vertex AI with Model Armor policies.

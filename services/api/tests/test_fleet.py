@@ -4,7 +4,7 @@ from app.config import Settings
 from app.connectors.report_writer import ReportWriter
 from app.fleet import FraudInvestigationFleet
 from app.federation.secure_agg import secure_aggregate
-from app.memory.memory_bank import MemoryBank
+from app.memory.memory_bank import FirestoreMemoryBank, MemoryBank
 from app.observability.audit import AuditLedger
 from app.domain.models import ActorRole, ApprovalDecisionRequest, RequestContext
 from app.security.redaction import redact_case_for_role
@@ -99,6 +99,25 @@ def test_embedded_secure_aggregation_recovers_sum() -> None:
     assert metadata["server_observes"] == "masked_node_updates_and_aggregate_only"
 
 
+def test_firestore_memory_bank_saves_and_loads_case(tmp_path: Path) -> None:
+    settings = Settings(
+        google_cloud_project="demo-project",
+        firestore_case_collection="test_cases",
+    )
+    fleet = _test_fleet(tmp_path)
+    case = fleet.investigate("tx-9001")
+    firestore_memory = FirestoreMemoryBank(settings, client=FakeFirestoreClient())
+
+    snapshot_id = firestore_memory.save_case(case)
+    loaded_case = firestore_memory.load_case(case.case_id)
+
+    assert loaded_case is not None
+    assert snapshot_id.startswith("mem-")
+    assert loaded_case.case_id == case.case_id
+    assert loaded_case.memory_snapshot_id == snapshot_id
+    assert loaded_case.approval_request is not None
+
+
 def _test_fleet(tmp_path: Path) -> FraudInvestigationFleet:
     settings = Settings()
     return FraudInvestigationFleet(
@@ -107,3 +126,52 @@ def _test_fleet(tmp_path: Path) -> FraudInvestigationFleet:
         memory_bank=MemoryBank(settings, tmp_path / "memory.jsonl"),
         audit_ledger=AuditLedger(settings, tmp_path / "audit.jsonl"),
     )
+
+
+class FakeFirestoreClient:
+    def __init__(self) -> None:
+        self.collections: dict[str, FakeCollectionRef] = {}
+
+    def collection(self, name: str) -> "FakeCollectionRef":
+        if name not in self.collections:
+            self.collections[name] = FakeCollectionRef()
+        return self.collections[name]
+
+
+class FakeCollectionRef:
+    def __init__(self) -> None:
+        self.documents: dict[str, FakeDocumentRef] = {}
+
+    def document(self, document_id: str) -> "FakeDocumentRef":
+        if document_id not in self.documents:
+            self.documents[document_id] = FakeDocumentRef()
+        return self.documents[document_id]
+
+
+class FakeDocumentRef:
+    def __init__(self) -> None:
+        self.payload: dict | None = None
+        self.collections: dict[str, FakeCollectionRef] = {}
+
+    def set(self, payload: dict, merge: bool = False) -> None:
+        if merge and self.payload:
+            self.payload.update(payload)
+            return
+        self.payload = payload.copy()
+
+    def get(self) -> "FakeSnapshot":
+        return FakeSnapshot(self.payload)
+
+    def collection(self, name: str) -> FakeCollectionRef:
+        if name not in self.collections:
+            self.collections[name] = FakeCollectionRef()
+        return self.collections[name]
+
+
+class FakeSnapshot:
+    def __init__(self, payload: dict | None) -> None:
+        self.payload = payload
+        self.exists = payload is not None
+
+    def to_dict(self) -> dict | None:
+        return self.payload.copy() if self.payload else None

@@ -24,7 +24,7 @@ from app.domain.models import (
 )
 from app.federation.engine import VeritasFederatedRiskEngine
 from app.gateway.agent_gateway import AgentGateway
-from app.memory.memory_bank import MemoryBank
+from app.memory.memory_bank import MemoryBank, create_memory_bank
 from app.observability.audit import AuditLedger
 from app.security.context import build_service_context
 from app.security.guardrails import ModelArmorGuardrail
@@ -51,7 +51,7 @@ class FraudInvestigationFleet:
         self.repository = repository or InvestigationRepository()
         self.report_writer = report_writer or ReportWriter()
         self.bus = bus or LocalPubSubBus()
-        self.memory_bank = memory_bank or MemoryBank(settings)
+        self.memory_bank = memory_bank or create_memory_bank(settings)
         self.audit_ledger = audit_ledger or AuditLedger(settings)
         self.policy_engine = policy_engine or PolicyEngine()
         self.guardrail = guardrail or ModelArmorGuardrail()

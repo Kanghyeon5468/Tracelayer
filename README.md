@@ -18,7 +18,7 @@ TraceLayer now includes concrete enterprise controls in the runnable backend:
 | Agent Gateway | `AgentGateway` authorizes every agent run before execution. |
 | Least Privilege | `PolicyEngine` checks role scopes, agent permissions, and data classification. |
 | Model Armor Boundary | `ModelArmorGuardrail` scans model inputs and outputs for prompt injection and PII. |
-| Memory Bank | `MemoryBank` stores append-only case snapshots across sessions. |
+| Memory Bank | `MemoryBank` stores append-only local snapshots; `FirestoreMemoryBank` stores deployed case state and approval updates. |
 | Audit Ledger | `AuditLedger` writes hash-chained JSONL events for tamper-evident review. |
 | Human Approval | High-risk actions produce approval requests; final action requires supervisor approval. |
 | Embedded Veritas Federation | `VeritasFederatedRiskEngine` produces cross-institution risk signals without raw record movement. |
@@ -177,7 +177,7 @@ Do not put Gemini, Google Cloud, or API keys in dashboard files.
 | Transaction store | JSON files in `data/` | Firestore, Cloud SQL, or BigQuery |
 | Related transaction search | In-memory graph search | BigQuery |
 | Async work distribution | Direct orchestrator call | Pub/Sub topics |
-| Memory bank | Case context object | Firestore or AlloyDB with policy-scoped records |
+| Memory bank | Local JSONL append-only snapshots | Firestore case documents with append-only snapshot subcollections |
 | Model calls | Mock reasoner by default | Gemini 3.5 Flash or newer via Vertex AI/Gemini API |
 | Guardrails | Compliance checks and redaction utilities | Model Armor and Agent Gateway policies |
 | Audit evidence | Markdown report output | Cloud Logging, Trace, BigQuery audit tables, PDF export |
@@ -195,6 +195,9 @@ Important values:
 | `GEMINI_API_KEY` | Enables backend-only Gemini API calls in `gemini_api` mode. |
 | `GEMINI_MODEL` | Defaults to `gemini-2.5-flash`, a broadly available Vertex AI Flash model. |
 | `GOOGLE_CLOUD_PROJECT` | Project used by Cloud Run, Pub/Sub, BigQuery, and Firestore. |
+| `MEMORY_BACKEND` | Selects `local`, `firestore`, or `auto` case memory persistence. |
+| `FIRESTORE_DATABASE` | Firestore database ID for deployed case state. |
+| `FIRESTORE_CASE_COLLECTION` | Firestore collection for case records and snapshot history. |
 | `SECURITY_MODE` | Use `permissive` locally and `enforcing` for deployed API-key checks. |
 | `AUDIT_LEDGER_PATH` | Local hash-chained audit log path. |
 | `MEMORY_BANK_PATH` | Local append-only case memory path. |

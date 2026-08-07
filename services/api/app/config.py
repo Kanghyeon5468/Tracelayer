@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     google_cloud_project: str | None = None
     google_cloud_location: str = "us-central1"
     firestore_database: str = "(default)"
+    firestore_case_collection: str = "tracelayer_cases"
     bigquery_dataset: str = "fraud_investigations"
     pubsub_topic_investigations: str = "tracelayer-investigations"
     pubsub_topic_approvals: str = "tracelayer-approvals"
@@ -21,6 +22,7 @@ class Settings(BaseSettings):
     demo_analyst_api_key: str = "local-demo-key"
     allowed_origins: str = "http://localhost:8080,http://localhost:5173,file://"
     audit_ledger_path: str | None = None
+    memory_backend: str = "local"
     memory_bank_path: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

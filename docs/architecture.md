@@ -27,7 +27,7 @@ TraceLayer is organized as an enterprise agent fleet. Each agent has a narrow re
 | Agent Registry | `AgentRegistry` declares names, versions, identities, and permissions. |
 | Agent Runtime | `FraudInvestigationFleet` coordinates the current local runtime; Pub/Sub stubs show the deployed path. |
 | Agent Gateway | `AgentGateway` checks least privilege, executes guardrails, and writes audit events for each agent. |
-| Memory Bank | `MemoryBank` writes append-only case snapshots for cross-session continuity. |
+| Memory Bank | `MemoryBank` writes local append-only snapshots; `FirestoreMemoryBank` persists deployed cases and approval decisions. |
 | Agent Identity | Each agent receives a service identity and permission scope. |
 | Model Armor | `ModelArmorGuardrail` protects prompts, redacts PII-like values, and blocks prompt injection. |
 | Observability | `AuditLedger` writes hash-chained events that can map to Cloud Logging and OpenTelemetry traces. |
@@ -56,9 +56,10 @@ Local mode uses JSON fixtures:
 - `data/customers.json`
 - `data/policies.md`
 
-Cloud mode should replace these adapters with:
+Cloud mode uses Firestore for case state and can replace the remaining adapters with:
 
-- Firestore or Cloud SQL for customer and case records.
+- Firestore for investigation cases and approval status.
+- Firestore or Cloud SQL for customer records.
 - BigQuery for historical transaction search.
 - Pub/Sub for asynchronous agent jobs.
 - Cloud Storage for generated reports.
@@ -83,4 +84,4 @@ Recommended production controls:
 4. `AgentGateway` checks each agent's required permissions against its registered identity.
 5. `ModelArmorGuardrail` inspects model prompts and sanitizes agent summaries.
 6. `AuditLedger` records authorization, execution, persistence, and approval events.
-7. `MemoryBank` stores case snapshots so the case can be reviewed or approved later.
+7. `MemoryBank` or `FirestoreMemoryBank` stores case snapshots so the case can be reviewed or approved later.

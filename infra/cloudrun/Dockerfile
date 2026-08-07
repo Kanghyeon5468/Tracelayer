@@ -9,7 +9,7 @@ COPY services/api/pyproject.toml ./pyproject.toml
 COPY services/api/app ./app
 COPY data /data
 
-RUN pip install --no-cache-dir ".[gemini]"
+RUN pip install --no-cache-dir ".[gemini,cloud]"
 
 EXPOSE 8080
 
