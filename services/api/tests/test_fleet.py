@@ -62,6 +62,30 @@ def test_random_demo_uses_flagged_demo_transactions(tmp_path: Path, monkeypatch)
     assert case.risk_score >= 70
 
 
+def test_random_demo_avoids_recent_demo_repeats(tmp_path: Path, monkeypatch) -> None:
+    fleet = _test_fleet(tmp_path)
+    candidate_sets: list[list[str]] = []
+
+    def choose_first(values: list[str]) -> str:
+        candidate_sets.append(list(values))
+        return values[0]
+
+    monkeypatch.setattr(fleet_module.random, "choice", choose_first)
+
+    first_case = fleet.investigate_random_demo()
+    second_case = fleet.investigate_random_demo()
+    third_case = fleet.investigate_random_demo()
+
+    assert first_case.trigger_transaction_id == "tx-9001"
+    assert second_case.trigger_transaction_id == "tx-9101"
+    assert third_case.trigger_transaction_id == "tx-9201"
+    assert candidate_sets == [
+        ["tx-9001", "tx-9101", "tx-9201"],
+        ["tx-9101", "tx-9201"],
+        ["tx-9201"],
+    ]
+
+
 def test_viewer_cannot_start_investigation(tmp_path: Path) -> None:
     fleet = _test_fleet(tmp_path)
     viewer = RequestContext(

@@ -174,10 +174,27 @@ class FraudInvestigationFleet:
         if not transaction_ids:
             raise ValueError("No flagged demo transactions are configured.")
         return self.investigate(
-            random.choice(transaction_ids),
+            self._choose_demo_transaction_id(transaction_ids),
             request,
             create_case_run=True,
         )
+
+    def _choose_demo_transaction_id(self, transaction_ids: list[str]) -> str:
+        recent_transaction_ids: list[str] = []
+        for case in self.memory_bank.list_cases():
+            transaction_id = case.trigger_transaction_id
+            if transaction_id not in transaction_ids or transaction_id in recent_transaction_ids:
+                continue
+            recent_transaction_ids.append(transaction_id)
+            if len(recent_transaction_ids) >= max(len(transaction_ids) - 1, 1):
+                break
+
+        excluded = set(recent_transaction_ids)
+        candidates = [transaction_id for transaction_id in transaction_ids if transaction_id not in excluded]
+        if not candidates:
+            candidates = transaction_ids
+
+        return random.choice(candidates)
 
     def get_case(self, case_id: str, request: RequestContext | None = None) -> InvestigationCase:
         request = request or build_service_context()
