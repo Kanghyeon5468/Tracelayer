@@ -45,6 +45,29 @@ class MemoryBank:
         case = InvestigationCase.model_validate(latest["case"])
         return case.model_copy(update={"memory_snapshot_id": latest["snapshot_id"]})
 
+    def list_pending_approval_cases(self) -> list[InvestigationCase]:
+        latest_by_case: dict[str, dict] = {}
+        if not self.memory_path.exists():
+            return []
+
+        with self.memory_path.open("r", encoding="utf-8") as file:
+            for line in file:
+                payload = json.loads(line)
+                latest_by_case[payload["case"]["case_id"]] = payload
+
+        pending_cases: list[InvestigationCase] = []
+        for payload in latest_by_case.values():
+            case_payload = payload["case"]
+            approval = case_payload.get("approval_request")
+            if case_payload.get("status") != "needs_approval" or not approval:
+                continue
+            if approval.get("status") != "pending":
+                continue
+            case = InvestigationCase.model_validate(case_payload)
+            pending_cases.append(case.model_copy(update={"memory_snapshot_id": payload["snapshot_id"]}))
+
+        return sorted(pending_cases, key=lambda case: case.risk_score, reverse=True)
+
     @staticmethod
     def _resolve_memory_path(settings: Settings) -> Path:
         if settings.memory_bank_path:
@@ -112,6 +135,24 @@ class FirestoreMemoryBank:
 
         case = InvestigationCase.model_validate(case_payload)
         return case.model_copy(update={"memory_snapshot_id": snapshot_id})
+
+    def list_pending_approval_cases(self) -> list[InvestigationCase]:
+        collection = self.client.collection(self.collection_name)
+        query = collection.where("status", "==", "needs_approval")
+        pending_cases: list[InvestigationCase] = []
+
+        for document in query.stream():
+            payload = document.to_dict() or {}
+            case_payload = payload.get("case")
+            approval = (case_payload or {}).get("approval_request")
+            if not case_payload or not approval or approval.get("status") != "pending":
+                continue
+            case = InvestigationCase.model_validate(case_payload)
+            pending_cases.append(
+                case.model_copy(update={"memory_snapshot_id": payload.get("latest_snapshot_id")})
+            )
+
+        return sorted(pending_cases, key=lambda case: case.risk_score, reverse=True)
 
     @staticmethod
     def _build_client(settings: Settings):

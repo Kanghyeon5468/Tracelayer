@@ -129,10 +129,14 @@ const fallbackCase = {
   memory_snapshot_id: "demo-memory-snapshot",
 };
 
+const inferredApiBaseUrl = window.location.protocol.startsWith("http")
+  ? window.location.origin
+  : "http://localhost:8080";
+
 const API_BASE_URL =
   window.TRACELAYER_API_BASE ||
   localStorage.getItem("tracelayer.apiBaseUrl") ||
-  "http://localhost:8080";
+  inferredApiBaseUrl;
 
 const titleCase = (value) =>
   String(value)

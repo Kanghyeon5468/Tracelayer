@@ -20,6 +20,7 @@ from app.domain.models import (
     CaseStatus,
     InvestigationCase,
     InvestigationContext,
+    PendingApprovalSummary,
     RequestContext,
 )
 from app.federation.engine import VeritasFederatedRiskEngine
@@ -175,6 +176,42 @@ class FraudInvestigationFleet:
         if not case:
             raise KeyError(f"Case not found: {case_id}")
         return case
+
+    def list_pending_approvals(
+        self,
+        request: RequestContext | None = None,
+    ) -> list[PendingApprovalSummary]:
+        request = request or build_service_context()
+        actor_decision = self.policy_engine.actor_can(request, "approvals.decide")
+        self.audit_ledger.record(
+            request=request,
+            action="approvals.list_pending",
+            resource="pending-approvals",
+            decision="allow" if actor_decision.allowed else "deny",
+            reason=actor_decision.reason,
+        )
+        if not actor_decision.allowed:
+            raise PermissionError(actor_decision.reason)
+
+        summaries: list[PendingApprovalSummary] = []
+        for case in self.memory_bank.list_pending_approval_cases():
+            if not case.approval_request:
+                continue
+            summaries.append(
+                PendingApprovalSummary(
+                    case_id=case.case_id,
+                    approval_id=case.approval_request.approval_id,
+                    action=case.approval_request.action,
+                    reason=case.approval_request.reason,
+                    risk_score=case.risk_score,
+                    priority=case.priority,
+                    trigger_transaction_id=case.trigger_transaction_id,
+                    customer_id=case.customer_id,
+                    requested_by_agent_id=case.approval_request.requested_by_agent_id,
+                    memory_snapshot_id=case.memory_snapshot_id,
+                )
+            )
+        return summaries
 
     def decide_approval(
         self,

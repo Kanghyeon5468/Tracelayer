@@ -120,6 +120,19 @@ class ApprovalDecisionRequest(BaseModel):
     reason: str
 
 
+class PendingApprovalSummary(BaseModel):
+    case_id: str
+    approval_id: str
+    action: str
+    reason: str
+    risk_score: int
+    priority: Priority
+    trigger_transaction_id: str
+    customer_id: str
+    requested_by_agent_id: str
+    memory_snapshot_id: str | None = None
+
+
 class RequestContext(BaseModel):
     actor_id: str
     role: ActorRole

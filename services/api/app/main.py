@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.agents.registry import AgentRegistry
 from app.config import get_settings
@@ -11,6 +15,7 @@ from app.domain.models import (
     AuditEvent,
     InvestigationCase,
     InvestigationRequest,
+    PendingApprovalSummary,
     RequestContext,
 )
 from app.fleet import FraudInvestigationFleet
@@ -18,6 +23,15 @@ from app.observability.audit import AuditLedger
 from app.security.auth import get_request_context
 from app.security.policy import PolicyEngine
 from app.security.redaction import redact_case_for_role
+
+
+def _find_dashboard_path() -> str | None:
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "apps" / "dashboard"
+        if candidate.exists():
+            return str(candidate)
+    return None
+
 
 settings = get_settings()
 app = FastAPI(
@@ -32,6 +46,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+dashboard_path = _find_dashboard_path()
+if dashboard_path:
+    app.mount("/console", StaticFiles(directory=dashboard_path, html=True), name="console")
 
 
 @app.get("/health")
@@ -51,6 +69,16 @@ def runtime_config() -> dict[str, str | bool | None]:
         "google_cloud_location": settings.google_cloud_location,
         "secrets_in_browser": False,
     }
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard() -> RedirectResponse:
+    return RedirectResponse(url="/console/index.html")
+
+
+@app.get("/admin", include_in_schema=False)
+def admin_console() -> RedirectResponse:
+    return RedirectResponse(url="/console/admin.html")
 
 
 @app.get("/agents", response_model=list[AgentIdentity])
@@ -86,6 +114,13 @@ def get_case(
 ) -> InvestigationCase:
     case = _run_or_raise(lambda: FraudInvestigationFleet(settings).get_case(case_id, request))
     return redact_case_for_role(case, request.role)
+
+
+@app.get("/approvals/pending", response_model=list[PendingApprovalSummary])
+def list_pending_approvals(
+    request: RequestContext = Depends(get_request_context),
+) -> list[PendingApprovalSummary]:
+    return _run_or_raise(lambda: FraudInvestigationFleet(settings).list_pending_approvals(request))
 
 
 @app.post("/cases/{case_id}/approval", response_model=InvestigationCase)

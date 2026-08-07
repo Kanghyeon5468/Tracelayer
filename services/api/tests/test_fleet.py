@@ -73,6 +73,47 @@ def test_supervisor_can_decide_approval(tmp_path: Path) -> None:
     assert fleet.audit_ledger.verify_chain()
 
 
+def test_supervisor_can_list_pending_approvals(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+    supervisor = RequestContext(
+        actor_id="supervisor@example.com",
+        role=ActorRole.SUPERVISOR,
+        request_id="req-test-supervisor-pending",
+    )
+
+    case = fleet.investigate("tx-9001", supervisor)
+    pending = fleet.list_pending_approvals(supervisor)
+
+    assert len(pending) == 1
+    assert pending[0].case_id == case.case_id
+    assert pending[0].approval_id == "appr-case-tx-9001"
+    assert pending[0].risk_score == case.risk_score
+
+
+def test_approval_decision_removes_case_from_pending_list(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+    supervisor = RequestContext(
+        actor_id="supervisor@example.com",
+        role=ActorRole.SUPERVISOR,
+        request_id="req-test-supervisor-deny",
+    )
+
+    case = fleet.investigate("tx-9001", supervisor)
+    assert fleet.list_pending_approvals(supervisor)
+
+    fleet.decide_approval(
+        case.case_id,
+        ApprovalDecisionRequest(
+            approval_id=case.approval_request.approval_id,
+            decision="denied",
+            reason="Reviewer denied the hold for test coverage.",
+        ),
+        supervisor,
+    )
+
+    assert fleet.list_pending_approvals(supervisor) == []
+
+
 def test_viewer_case_response_is_redacted(tmp_path: Path) -> None:
     fleet = _test_fleet(tmp_path)
     case = fleet.investigate("tx-9001")
@@ -147,6 +188,9 @@ class FakeCollectionRef:
             self.documents[document_id] = FakeDocumentRef()
         return self.documents[document_id]
 
+    def where(self, field: str, operator: str, value: str) -> "FakeQuery":
+        return FakeQuery(self.documents.values(), field, operator, value)
+
 
 class FakeDocumentRef:
     def __init__(self) -> None:
@@ -175,3 +219,23 @@ class FakeSnapshot:
 
     def to_dict(self) -> dict | None:
         return self.payload.copy() if self.payload else None
+
+
+class FakeQuery:
+    def __init__(
+        self,
+        documents,
+        field: str,
+        operator: str,
+        value: str,
+    ) -> None:
+        self.documents = documents
+        self.field = field
+        self.operator = operator
+        self.value = value
+
+    def stream(self):
+        for document in self.documents:
+            payload = document.payload or {}
+            if self.operator == "==" and payload.get(self.field) == self.value:
+                yield FakeSnapshot(payload)

@@ -160,6 +160,12 @@ Open the static dashboard:
 apps/dashboard/index.html
 ```
 
+Open the supervisor approval console:
+
+```text
+apps/dashboard/admin.html
+```
+
 The dashboard can call the local API if it is running. Otherwise, it falls back to an embedded demo case. To point the dashboard at a deployed backend, copy `apps/dashboard/config.example.js` to `apps/dashboard/config.js` and set only the backend URL:
 
 ```js
@@ -260,3 +266,5 @@ GEMINI_MODEL=gemini-2.5-flash
 ```
 
 The dashboard never receives these secrets. It only calls `/cases/demo`, `/cases/investigate`, and `/runtime/config` on the backend.
+
+The admin console calls `/approvals/pending`, `/cases/{case_id}`, and `/cases/{case_id}/approval` with supervisor headers. In deployed enforcing mode, enter the demo API key in the admin console or send it through a trusted internal gateway.
