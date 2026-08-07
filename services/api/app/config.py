@@ -8,8 +8,9 @@ class Settings(BaseSettings):
     app_name: str = "tracelayer"
     log_level: str = "INFO"
     use_mock_data: bool = True
+    ai_provider: str = "mock"
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-3.5-flash"
+    gemini_model: str = "gemini-2.5-flash"
     google_cloud_project: str | None = None
     google_cloud_location: str = "us-central1"
     firestore_database: str = "(default)"
@@ -27,6 +28,16 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def resolved_ai_provider(self) -> str:
+        if self.ai_provider != "auto":
+            return self.ai_provider
+        if self.gemini_api_key:
+            return "gemini_api"
+        if self.google_cloud_project:
+            return "vertex_ai"
+        return "mock"
 
 
 @lru_cache

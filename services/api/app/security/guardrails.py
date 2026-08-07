@@ -20,6 +20,8 @@ PROMPT_INJECTION_PATTERNS = [
 ]
 
 ACCOUNT_PATTERN = re.compile(r"\bacct-[A-Za-z0-9-]+\b")
+CUSTOMER_PATTERN = re.compile(r"\bcus-[A-Za-z0-9-]+\b")
+DEVICE_PATTERN = re.compile(r"\bdev-[A-Za-z0-9-]+\b")
 IP_PATTERN = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 
 
@@ -61,6 +63,16 @@ class ModelArmorGuardrail:
                 )
             )
 
+        if CUSTOMER_PATTERN.search(text) or DEVICE_PATTERN.search(text):
+            findings.append(
+                GuardrailFinding(
+                    finding_id=f"{control_prefix}-direct-identifier",
+                    severity="medium",
+                    control="pii_detection",
+                    description="Direct customer or device identifier detected and redaction is required.",
+                )
+            )
+
         if IP_PATTERN.search(text):
             findings.append(
                 GuardrailFinding(
@@ -95,6 +107,8 @@ class ModelArmorGuardrail:
     def redact_sensitive_text(self, text: str) -> str:
         redacted = redact_email(text)
         redacted = ACCOUNT_PATTERN.sub("acct-***", redacted)
+        redacted = CUSTOMER_PATTERN.sub("cus-***", redacted)
+        redacted = DEVICE_PATTERN.sub("dev-***", redacted)
         redacted = IP_PATTERN.sub("ip-***", redacted)
         return redacted
 

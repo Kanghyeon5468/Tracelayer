@@ -45,6 +45,13 @@ body {
   text-transform: uppercase;
 }
 
+.runtime-status {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
 h1,
 h2,
 p {

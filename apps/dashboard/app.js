@@ -129,6 +129,11 @@ const fallbackCase = {
   memory_snapshot_id: "demo-memory-snapshot",
 };
 
+const API_BASE_URL =
+  window.TRACELAYER_API_BASE ||
+  localStorage.getItem("tracelayer.apiBaseUrl") ||
+  "http://localhost:8080";
+
 const titleCase = (value) =>
   String(value)
     .replaceAll("_", " ")
@@ -234,13 +239,27 @@ const renderCase = (caseData) => {
     : "<p>No approval request has been created.</p>";
 };
 
+const loadRuntimeConfig = async () => {
+  const status = document.querySelector("#runtime-status");
+  try {
+    const response = await fetch(`${API_BASE_URL}/runtime/config`);
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    const config = await response.json();
+    status.textContent = `Backend: ${config.ai_provider} / ${config.gemini_model}`;
+  } catch (error) {
+    status.textContent = "Backend: local fallback";
+  }
+};
+
 const runDemo = async () => {
   const button = document.querySelector("#run-demo");
   button.disabled = true;
   button.textContent = "Running...";
 
   try {
-    const response = await fetch("http://localhost:8080/cases/demo", { method: "POST" });
+    const response = await fetch(`${API_BASE_URL}/cases/demo`, { method: "POST" });
     if (!response.ok) {
       throw new Error(`API returned ${response.status}`);
     }
@@ -255,3 +274,4 @@ const runDemo = async () => {
 
 document.querySelector("#run-demo").addEventListener("click", runDemo);
 renderCase(fallbackCase);
+loadRuntimeConfig();

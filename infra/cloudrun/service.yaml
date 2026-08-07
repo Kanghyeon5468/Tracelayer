@@ -20,8 +20,14 @@ spec:
               value: "false"
             - name: SECURITY_MODE
               value: enforcing
+            - name: AI_PROVIDER
+              value: vertex_ai
             - name: GEMINI_MODEL
-              value: gemini-3.5-flash
+              value: gemini-2.5-flash
+            - name: GOOGLE_CLOUD_PROJECT
+              value: PROJECT_ID
+            - name: GOOGLE_CLOUD_LOCATION
+              value: us-central1
             - name: ALLOWED_ORIGINS
               value: https://YOUR_DASHBOARD_DOMAIN
             - name: PUBSUB_TOPIC_INVESTIGATIONS

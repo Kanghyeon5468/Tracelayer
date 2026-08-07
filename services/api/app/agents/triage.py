@@ -101,7 +101,7 @@ class TriageAgent(BaseInvestigationAgent):
         prompt = (
             "Explain the fraud risk pattern for a flagged transaction using concise, "
             "auditable language. Include why a human reviewer should inspect the case. "
-            f"Transaction: {transaction.model_dump()}"
+            f"Transaction features: {self._model_safe_transaction_features(context)}"
         )
         model_summary = self.reasoner.summarize_pattern(prompt)
         context.guardrail_findings.extend(self.reasoner.last_guardrail_findings)
@@ -138,3 +138,18 @@ class TriageAgent(BaseInvestigationAgent):
         if score >= 40:
             return Priority.MEDIUM
         return Priority.LOW
+
+    @staticmethod
+    def _model_safe_transaction_features(context: InvestigationContext) -> dict:
+        transaction = context.trigger_transaction
+        return {
+            "amount": transaction.amount,
+            "currency": transaction.currency,
+            "destination_country": transaction.country,
+            "customer_home_country": context.customer.home_country,
+            "channel": transaction.channel,
+            "utc_hour": transaction.timestamp.hour,
+            "status": transaction.status,
+            "risk_flags": transaction.risk_flags,
+            "related_transaction_count": len(context.related_transactions),
+        }

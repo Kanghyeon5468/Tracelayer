@@ -9,6 +9,17 @@ TraceLayer implements security controls as executable backend code, not only as 
 - `SECURITY_MODE=enforcing` requires `X-API-Key`.
 - `PolicyEngine` maps roles to scopes and denies unsupported actions.
 
+## Secret Boundary
+
+The dashboard never stores or sends Gemini, Google Cloud, or API provider secrets. It only knows the TraceLayer backend URL. All live AI and Google Cloud calls happen inside the FastAPI service through one of these backend providers:
+
+- `mock`
+- `gemini_api`
+- `vertex_ai`
+- `auto`
+
+`/runtime/config` exposes only non-secret runtime metadata so the dashboard can display which backend mode is active.
+
 ## Agent Least Privilege
 
 Every agent declares `required_permissions`.

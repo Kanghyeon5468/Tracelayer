@@ -39,6 +39,20 @@ def health() -> dict[str, str]:
     return {"status": "ok", "app": settings.app_name, "env": settings.app_env}
 
 
+@app.get("/runtime/config")
+def runtime_config() -> dict[str, str | bool | None]:
+    return {
+        "app": settings.app_name,
+        "env": settings.app_env,
+        "security_mode": settings.security_mode,
+        "ai_provider": settings.resolved_ai_provider,
+        "gemini_model": settings.gemini_model,
+        "google_cloud_project": settings.google_cloud_project,
+        "google_cloud_location": settings.google_cloud_location,
+        "secrets_in_browser": False,
+    }
+
+
 @app.get("/agents", response_model=list[AgentIdentity])
 def list_agents(request: RequestContext = Depends(get_request_context)) -> list[AgentIdentity]:
     _require_scope(request, "agents.read")

@@ -1,0 +1,12 @@
+.git
+.DS_Store
+**/__pycache__/
+**/.pytest_cache/
+**/.venv/
+**/*.pyc
+services/api/.env
+services/api/tracelayer_api.egg-info/
+data/audit/*.jsonl
+data/memory/*.jsonl
+data/memory/*.json
+data/reports/*.md

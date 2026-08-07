@@ -14,6 +14,7 @@ build/
 *.egg-info/
 node_modules/
 coverage/
+apps/dashboard/config.js
 data/reports/*
 !data/reports/.gitkeep
 data/audit/*.jsonl
