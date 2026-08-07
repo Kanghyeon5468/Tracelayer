@@ -7,10 +7,11 @@ WORKDIR /app
 
 COPY services/api/pyproject.toml ./pyproject.toml
 COPY services/api/app ./app
-COPY apps/dashboard ./apps/dashboard
 COPY data /data
 
 RUN pip install --no-cache-dir ".[gemini,cloud]"
+
+COPY apps/dashboard ./apps/dashboard
 
 EXPOSE 8080
 
