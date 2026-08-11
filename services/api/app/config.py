@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     )
     network_search_backend: str = "auto"
     network_search_limit: int = 50
+    network_search_timeout_seconds: int = 3
     pubsub_topic_investigations: str = "tracelayer-investigations"
     pubsub_topic_approvals: str = "tracelayer-approvals"
     security_mode: str = "permissive"

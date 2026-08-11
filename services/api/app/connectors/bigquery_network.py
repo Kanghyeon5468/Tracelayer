@@ -46,10 +46,11 @@ class BigQueryNetworkSearch:
 
         try:
             client = self.client or self._build_client()
-            rows = client.query(
+            query_job = client.query(
                 self._query(),
                 job_config=self._job_config(transaction),
-            ).result()
+            )
+            rows = query_job.result(timeout=self.settings.network_search_timeout_seconds)
         except Exception as exc:
             if self.settings.network_search_backend == "bigquery":
                 raise RuntimeError(f"BigQuery network search failed: {exc}") from exc

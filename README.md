@@ -203,6 +203,7 @@ Important values:
 | `GOOGLE_CLOUD_PROJECT` | Project used by Cloud Run, Pub/Sub, BigQuery, and Firestore. |
 | `NETWORK_SEARCH_BACKEND` | Selects `auto`, `local`, or `bigquery` for related-transaction search. |
 | `BIGQUERY_TRANSACTIONS_TABLE` | Fully qualified BigQuery table for the Network Agent search path. |
+| `NETWORK_SEARCH_TIMEOUT_SECONDS` | Short BigQuery fallback timeout for demo-safe auto mode. |
 | `MEMORY_BACKEND` | Selects `local`, `firestore`, or `auto` case memory persistence. |
 | `FIRESTORE_DATABASE` | Firestore database ID for deployed case state. |
 | `FIRESTORE_CASE_COLLECTION` | Firestore collection for case records and snapshot history. |
