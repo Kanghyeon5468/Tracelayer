@@ -397,6 +397,28 @@ const pollJob = async (jobId) => {
   window.setTimeout(() => pollJob(jobId).catch(() => {}), 1200);
 };
 
+const runQueuedJob = async (jobId) => {
+  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/run`, {
+    method: "POST",
+    headers: apiHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(`API returned ${response.status}`);
+  }
+  const job = await response.json();
+  renderAsyncJob(job);
+  if (job.status === "succeeded" && job.case_id) {
+    const caseResponse = await fetch(`${API_BASE_URL}/cases/${job.case_id}`, {
+      headers: apiHeaders(),
+    });
+    if (caseResponse.ok) {
+      const caseData = await caseResponse.json();
+      renderCase(caseData);
+      publishCaseUpdate(caseData, "dashboard.async_demo");
+    }
+  }
+};
+
 const runAsyncDemo = async () => {
   const button = document.querySelector("#run-async-demo");
   button.disabled = true;
@@ -412,7 +434,9 @@ const runAsyncDemo = async () => {
     }
     const job = await response.json();
     renderAsyncJob(job);
-    pollJob(job.job_id).catch(() => {});
+    runQueuedJob(job.job_id)
+      .then(() => pollJob(job.job_id))
+      .catch(() => pollJob(job.job_id).catch(() => {}));
   } catch (error) {
     renderAsyncJob({
       job_id: "local-fallback",

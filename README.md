@@ -272,6 +272,6 @@ GEMINI_MODEL=gemini-2.5-flash
 
 The dashboard never receives these secrets. It only calls `/cases/demo`, `/cases/investigate`, and `/runtime/config` on the backend.
 
-For the Pub/Sub-style flow, the dashboard can call `/cases/demo/async`, then poll `/jobs/{job_id}` until the job returns a `case_id`. In Cloud Run, job state is persisted through Firestore when `MEMORY_BACKEND=firestore`.
+For the Pub/Sub-style flow, the dashboard can call `/cases/demo/async`, invoke the worker route `/jobs/{job_id}/run`, then poll `/jobs/{job_id}` until the job returns a `case_id`. In Cloud Run, job state is persisted through Firestore when `MEMORY_BACKEND=firestore`.
 
 The admin console calls `/approvals/pending`, `/cases/{case_id}`, and `/cases/{case_id}/approval` with supervisor headers. In deployed enforcing mode, enter the demo API key in the admin console or send it through a trusted internal gateway.
