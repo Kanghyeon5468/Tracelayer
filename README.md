@@ -201,12 +201,16 @@ Important values:
 | `GEMINI_API_KEY` | Enables backend-only Gemini API calls in `gemini_api` mode. |
 | `GEMINI_MODEL` | Defaults to `gemini-2.5-flash`, a broadly available Vertex AI Flash model. |
 | `GOOGLE_CLOUD_PROJECT` | Project used by Cloud Run, Pub/Sub, BigQuery, and Firestore. |
+| `NETWORK_SEARCH_BACKEND` | Selects `auto`, `local`, or `bigquery` for related-transaction search. |
+| `BIGQUERY_TRANSACTIONS_TABLE` | Fully qualified BigQuery table for the Network Agent search path. |
 | `MEMORY_BACKEND` | Selects `local`, `firestore`, or `auto` case memory persistence. |
 | `FIRESTORE_DATABASE` | Firestore database ID for deployed case state. |
 | `FIRESTORE_CASE_COLLECTION` | Firestore collection for case records and snapshot history. |
+| `FIRESTORE_JOB_COLLECTION` | Firestore collection for async investigation job state. |
 | `SECURITY_MODE` | Use `permissive` locally and `enforcing` for deployed API-key checks. |
 | `AUDIT_LEDGER_PATH` | Local hash-chained audit log path. |
 | `MEMORY_BANK_PATH` | Local append-only case memory path. |
+| `INVESTIGATION_JOB_PATH` | Local append-only async job state path. |
 
 ## Development Commands
 
@@ -266,5 +270,7 @@ GEMINI_MODEL=gemini-2.5-flash
 ```
 
 The dashboard never receives these secrets. It only calls `/cases/demo`, `/cases/investigate`, and `/runtime/config` on the backend.
+
+For the Pub/Sub-style flow, the dashboard can call `/cases/demo/async`, then poll `/jobs/{job_id}` until the job returns a `case_id`. In Cloud Run, job state is persisted through Firestore when `MEMORY_BACKEND=firestore`.
 
 The admin console calls `/approvals/pending`, `/cases/{case_id}`, and `/cases/{case_id}/approval` with supervisor headers. In deployed enforcing mode, enter the demo API key in the admin console or send it through a trusted internal gateway.

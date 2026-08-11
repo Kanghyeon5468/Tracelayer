@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +15,7 @@ from app.domain.models import (
     ApprovalLogEntry,
     AuditEvent,
     InvestigationCase,
+    InvestigationJob,
     InvestigationRequest,
     PendingApprovalSummary,
     RequestContext,
@@ -92,6 +93,25 @@ def list_agents(request: RequestContext = Depends(get_request_context)) -> list[
 def run_demo_case(request: RequestContext = Depends(get_request_context)) -> InvestigationCase:
     case = _run_or_raise(lambda: FraudInvestigationFleet(settings).investigate_random_demo(request))
     return redact_case_for_role(case, request.role)
+
+
+@app.post("/cases/demo/async", response_model=InvestigationJob)
+def enqueue_demo_case(
+    background_tasks: BackgroundTasks,
+    request: RequestContext = Depends(get_request_context),
+) -> InvestigationJob:
+    fleet = FraudInvestigationFleet(settings)
+    job = _run_or_raise(lambda: fleet.enqueue_random_demo(request))
+    background_tasks.add_task(_run_background_job, job.job_id, request)
+    return job
+
+
+@app.get("/jobs/{job_id}", response_model=InvestigationJob)
+def get_investigation_job(
+    job_id: str,
+    request: RequestContext = Depends(get_request_context),
+) -> InvestigationJob:
+    return _run_or_raise(lambda: FraudInvestigationFleet(settings).get_job(job_id, request))
 
 
 @app.post("/cases/investigate", response_model=InvestigationCase)
@@ -173,3 +193,7 @@ def _run_or_raise(handler):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _run_background_job(job_id: str, request: RequestContext) -> None:
+    FraudInvestigationFleet(settings).run_investigation_job(job_id, request)

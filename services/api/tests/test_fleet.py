@@ -6,6 +6,7 @@ from app.connectors.report_writer import ReportWriter
 import app.fleet as fleet_module
 from app.fleet import FraudInvestigationFleet
 from app.federation.secure_agg import secure_aggregate
+from app.memory.job_store import LocalInvestigationJobStore
 from app.memory.memory_bank import FirestoreMemoryBank, MemoryBank
 from app.observability.audit import AuditLedger
 from app.domain.models import ActorRole, ApprovalDecisionRequest, RequestContext
@@ -84,6 +85,34 @@ def test_random_demo_avoids_recent_demo_repeats(tmp_path: Path, monkeypatch) -> 
         ["tx-9101", "tx-9201"],
         ["tx-9201"],
     ]
+
+
+def test_network_agent_records_search_backend_metadata(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    case = fleet.investigate("tx-9001")
+    network_output = next(
+        output for output in case.agent_outputs if output.agent_id == "network-agent"
+    )
+
+    assert network_output.data["search"]["backend"] == "local_repository"
+    assert network_output.data["search"]["result_count"] >= 1
+
+
+def test_async_demo_job_persists_status_and_case_id(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    job = fleet.enqueue_random_demo()
+    assert job.status == "queued"
+    assert job.pubsub_message_id.startswith("local-pubsub-")
+
+    finished_job = fleet.run_investigation_job(job.job_id)
+    loaded_job = fleet.get_job(job.job_id)
+
+    assert finished_job.status == "succeeded"
+    assert finished_job.case_id is not None
+    assert loaded_job is not None
+    assert loaded_job.case_id == finished_job.case_id
 
 
 def test_viewer_cannot_start_investigation(tmp_path: Path) -> None:
@@ -255,11 +284,12 @@ def test_firestore_memory_bank_saves_and_loads_case(tmp_path: Path) -> None:
 
 
 def _test_fleet(tmp_path: Path) -> FraudInvestigationFleet:
-    settings = Settings()
+    settings = Settings(network_search_backend="local")
     return FraudInvestigationFleet(
         settings,
         report_writer=ReportWriter(tmp_path / "reports"),
         memory_bank=MemoryBank(settings, tmp_path / "memory.jsonl"),
+        job_store=LocalInvestigationJobStore(settings, tmp_path / "jobs.jsonl"),
         audit_ledger=AuditLedger(settings, tmp_path / "audit.jsonl"),
     )
 

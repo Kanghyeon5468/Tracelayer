@@ -13,6 +13,7 @@ from app.agents import (
     TriageAgent,
 )
 from app.config import Settings
+from app.connectors.bigquery_network import BigQueryNetworkSearch
 from app.connectors.pubsub import LocalPubSubBus
 from app.connectors.reasoner import GeminiReasoner
 from app.connectors.report_writer import ReportWriter
@@ -23,12 +24,20 @@ from app.domain.models import (
     CaseStatus,
     InvestigationCase,
     InvestigationContext,
+    InvestigationJob,
+    InvestigationJobStatus,
     PendingApprovalSummary,
     RequestContext,
 )
 from app.federation.engine import VeritasFederatedRiskEngine
 from app.gateway.agent_gateway import AgentGateway
-from app.memory.memory_bank import MemoryBank, create_memory_bank
+from app.memory.job_store import (
+    FirestoreInvestigationJobStore,
+    LocalInvestigationJobStore,
+    create_job_store,
+    touch_job,
+)
+from app.memory.memory_bank import FirestoreMemoryBank, MemoryBank, create_memory_bank
 from app.observability.audit import AuditLedger
 from app.security.context import build_service_context
 from app.security.guardrails import ModelArmorGuardrail
@@ -44,7 +53,8 @@ class FraudInvestigationFleet:
         repository: InvestigationRepository | None = None,
         report_writer: ReportWriter | None = None,
         bus: LocalPubSubBus | None = None,
-        memory_bank: MemoryBank | None = None,
+        memory_bank: MemoryBank | FirestoreMemoryBank | None = None,
+        job_store: LocalInvestigationJobStore | FirestoreInvestigationJobStore | None = None,
         audit_ledger: AuditLedger | None = None,
         policy_engine: PolicyEngine | None = None,
         guardrail: ModelArmorGuardrail | None = None,
@@ -56,6 +66,7 @@ class FraudInvestigationFleet:
         self.report_writer = report_writer or ReportWriter()
         self.bus = bus or LocalPubSubBus()
         self.memory_bank = memory_bank or create_memory_bank(settings)
+        self.job_store = job_store or create_job_store(settings)
         self.audit_ledger = audit_ledger or AuditLedger(settings)
         self.policy_engine = policy_engine or PolicyEngine()
         self.guardrail = guardrail or ModelArmorGuardrail()
@@ -83,7 +94,9 @@ class FraudInvestigationFleet:
 
         trigger = self.repository.get_transaction(transaction_id)
         customer = self.repository.get_customer(trigger.customer_id)
-        related_transactions = self.repository.find_related_transactions(trigger)
+        network_search = BigQueryNetworkSearch(self.settings, self.repository)
+        network_result = network_search.find_related_transactions(trigger)
+        related_transactions = network_result.transactions
 
         case_id = f"case-{trigger.transaction_id}"
         if create_case_run:
@@ -94,6 +107,7 @@ class FraudInvestigationFleet:
             trigger_transaction=trigger,
             customer=customer,
             related_transactions=related_transactions,
+            network_search_metadata=network_result.metadata,
         )
 
         self.bus.publish(
@@ -195,6 +209,99 @@ class FraudInvestigationFleet:
             candidates = transaction_ids
 
         return random.choice(candidates)
+
+    def enqueue_random_demo(
+        self,
+        request: RequestContext | None = None,
+    ) -> InvestigationJob:
+        request = request or build_service_context()
+        actor_decision = self.policy_engine.actor_can(request, "cases.investigate")
+        self.audit_ledger.record(
+            request=request,
+            action="jobs.enqueue_demo",
+            resource="random-demo",
+            decision="allow" if actor_decision.allowed else "deny",
+            reason=actor_decision.reason,
+        )
+        if not actor_decision.allowed:
+            raise PermissionError(actor_decision.reason)
+
+        transaction_ids = self.repository.list_demo_transaction_ids()
+        if not transaction_ids:
+            raise ValueError("No flagged demo transactions are configured.")
+
+        transaction_id = self._choose_demo_transaction_id(transaction_ids)
+        job_id = f"job-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}-{uuid4().hex[:8]}"
+        message = self.bus.publish(
+            self.settings.pubsub_topic_investigations,
+            {
+                "job_id": job_id,
+                "transaction_id": transaction_id,
+                "requested_by": request.actor_id,
+            },
+        )
+        job = InvestigationJob(
+            job_id=job_id,
+            status=InvestigationJobStatus.QUEUED,
+            transaction_id=transaction_id,
+            pubsub_topic=message.topic,
+            pubsub_message_id=message.message_id,
+        )
+        return self.job_store.save_job(job)
+
+    def run_investigation_job(
+        self,
+        job_id: str,
+        request: RequestContext | None = None,
+    ) -> InvestigationJob:
+        request = request or build_service_context()
+        job = self.job_store.load_job(job_id)
+        if not job:
+            raise KeyError(f"Investigation job not found: {job_id}")
+        if not job.transaction_id:
+            failed = touch_job(
+                job,
+                status=InvestigationJobStatus.FAILED,
+                error="Missing transaction id.",
+            )
+            return self.job_store.save_job(failed)
+
+        running = self.job_store.save_job(touch_job(job, status=InvestigationJobStatus.RUNNING))
+        try:
+            case = self.investigate(running.transaction_id, request, create_case_run=True)
+        except Exception as exc:
+            failed = touch_job(running, status=InvestigationJobStatus.FAILED, error=str(exc))
+            return self.job_store.save_job(failed)
+
+        succeeded = touch_job(
+            running,
+            status=InvestigationJobStatus.SUCCEEDED,
+            case_id=case.case_id,
+            error=None,
+        )
+        return self.job_store.save_job(succeeded)
+
+    def get_job(
+        self,
+        job_id: str,
+        request: RequestContext | None = None,
+    ) -> InvestigationJob:
+        request = request or build_service_context()
+        actor_decision = self.policy_engine.actor_can(request, "cases.read")
+        self.audit_ledger.record(
+            request=request,
+            action="jobs.read",
+            resource=job_id,
+            decision="allow" if actor_decision.allowed else "deny",
+            reason=actor_decision.reason,
+        )
+        if not actor_decision.allowed:
+            raise PermissionError(actor_decision.reason)
+
+        job = self.job_store.load_job(job_id)
+        if not job:
+            raise KeyError(f"Investigation job not found: {job_id}")
+        return job
 
     def get_case(self, case_id: str, request: RequestContext | None = None) -> InvestigationCase:
         request = request or build_service_context()

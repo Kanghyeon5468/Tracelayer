@@ -153,6 +153,25 @@ class ApprovalLogEntry(BaseModel):
     memory_snapshot_id: str | None = None
 
 
+class InvestigationJobStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class InvestigationJob(BaseModel):
+    job_id: str
+    status: InvestigationJobStatus
+    transaction_id: str | None = None
+    case_id: str | None = None
+    pubsub_topic: str
+    pubsub_message_id: str
+    error: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class RequestContext(BaseModel):
     actor_id: str
     role: ActorRole
@@ -202,6 +221,7 @@ class InvestigationContext(BaseModel):
     trigger_transaction: Transaction
     customer: Customer
     related_transactions: list[Transaction] = Field(default_factory=list)
+    network_search_metadata: dict[str, Any] = Field(default_factory=dict)
     risk_score: int = 0
     priority: Priority = Priority.LOW
     evidence_timeline: list[EvidenceEvent] = Field(default_factory=list)

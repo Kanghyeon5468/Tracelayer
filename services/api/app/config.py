@@ -15,7 +15,13 @@ class Settings(BaseSettings):
     google_cloud_location: str = "us-central1"
     firestore_database: str = "(default)"
     firestore_case_collection: str = "tracelayer_cases"
+    firestore_job_collection: str = "tracelayer_investigation_jobs"
     bigquery_dataset: str = "fraud_investigations"
+    bigquery_transactions_table: str = (
+        "project-6ecbea1e-e0c3-4325-a63.fraud_investigations.transactions"
+    )
+    network_search_backend: str = "auto"
+    network_search_limit: int = 50
     pubsub_topic_investigations: str = "tracelayer-investigations"
     pubsub_topic_approvals: str = "tracelayer-approvals"
     security_mode: str = "permissive"
@@ -24,6 +30,7 @@ class Settings(BaseSettings):
     audit_ledger_path: str | None = None
     memory_backend: str = "local"
     memory_bank_path: str | None = None
+    investigation_job_path: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

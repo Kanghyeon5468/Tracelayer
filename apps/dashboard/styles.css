@@ -86,6 +86,16 @@ button:hover,
   background: var(--accent-strong);
 }
 
+.secondary-action {
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+}
+
+.secondary-action:hover {
+  background: #edf3f8;
+}
+
 button:disabled {
   cursor: wait;
   opacity: 0.68;
@@ -269,6 +279,53 @@ label {
 
 .metric strong {
   overflow-wrap: anywhere;
+}
+
+.registry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.registry-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.registry-card header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.registry-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.registry-card code {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .admin-shell {
@@ -486,6 +543,10 @@ label {
   }
 
   .federated {
+    grid-template-columns: 1fr;
+  }
+
+  .registry-grid {
     grid-template-columns: 1fr;
   }
 

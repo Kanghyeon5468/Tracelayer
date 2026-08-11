@@ -189,6 +189,41 @@ const applyLiveCaseUpdate = (caseData) => {
   setLiveStatus(`Live sync: ${new Date().toLocaleTimeString()}`);
 };
 
+const renderAsyncJob = (job) => {
+  document.querySelector("#async-job").innerHTML = `
+    <div class="item">
+      <strong>${titleCase(job.status)}</strong>
+      <p>${job.job_id}</p>
+      <p>Transaction: ${job.transaction_id || "pending"} · Topic: ${job.pubsub_topic}</p>
+      <p>Message: ${job.pubsub_message_id}</p>
+      ${job.case_id ? `<p>Case: ${job.case_id}</p>` : ""}
+      ${job.error ? `<p>Error: ${job.error}</p>` : ""}
+    </div>
+  `;
+};
+
+const renderAgentRegistry = (agents) => {
+  document.querySelector("#agent-registry").innerHTML = agents
+    .map(
+      (agent) => `
+        <article class="registry-card">
+          <header>
+            <h3>${agent.display_name}</h3>
+            <span class="chip">${agent.version}</span>
+          </header>
+          <code>${agent.service_account}</code>
+          <div class="chip-row">
+            ${agent.permissions.map((permission) => `<span class="chip">${permission}</span>`).join("")}
+          </div>
+          <div class="chip-row">
+            ${agent.data_access.map((access) => `<span class="chip">${titleCase(access)}</span>`).join("")}
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+};
+
 const renderCase = (caseData) => {
   currentCaseId = caseData.case_id;
   localStorage.setItem("tracelayer.currentCaseId", currentCaseId);
@@ -336,6 +371,78 @@ const runDemo = async () => {
   }
 };
 
+const pollJob = async (jobId) => {
+  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
+    headers: apiHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(`API returned ${response.status}`);
+  }
+  const job = await response.json();
+  renderAsyncJob(job);
+  if (job.status === "succeeded" && job.case_id) {
+    const caseResponse = await fetch(`${API_BASE_URL}/cases/${job.case_id}`, {
+      headers: apiHeaders(),
+    });
+    if (caseResponse.ok) {
+      const caseData = await caseResponse.json();
+      renderCase(caseData);
+      publishCaseUpdate(caseData, "dashboard.async_demo");
+    }
+    return;
+  }
+  if (job.status === "failed") {
+    return;
+  }
+  window.setTimeout(() => pollJob(jobId).catch(() => {}), 1200);
+};
+
+const runAsyncDemo = async () => {
+  const button = document.querySelector("#run-async-demo");
+  button.disabled = true;
+  button.textContent = "Queued...";
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/cases/demo/async`, {
+      method: "POST",
+      headers: apiHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    const job = await response.json();
+    renderAsyncJob(job);
+    pollJob(job.job_id).catch(() => {});
+  } catch (error) {
+    renderAsyncJob({
+      job_id: "local-fallback",
+      status: "failed",
+      transaction_id: null,
+      pubsub_topic: "unavailable",
+      pubsub_message_id: "unavailable",
+      error: "Async endpoint unavailable.",
+    });
+  } finally {
+    button.disabled = false;
+    button.textContent = "Run Async Demo";
+  }
+};
+
+const loadAgentRegistry = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/agents`, {
+      headers: apiHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    renderAgentRegistry(await response.json());
+  } catch (error) {
+    document.querySelector("#agent-registry").innerHTML =
+      '<div class="item"><strong>Registry unavailable</strong><p>Agent identities could not be loaded.</p></div>';
+  }
+};
+
 const loadCurrentCase = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/cases/${currentCaseId}`, {
@@ -371,6 +478,8 @@ window.addEventListener("storage", (event) => {
 });
 
 document.querySelector("#run-demo").addEventListener("click", runDemo);
+document.querySelector("#run-async-demo").addEventListener("click", runAsyncDemo);
 renderCase(fallbackCase);
 loadRuntimeConfig();
+loadAgentRegistry();
 loadCurrentCase();
