@@ -43,5 +43,32 @@
     "kyc_risk": "medium",
     "emails": ["ops@northlinestudio.example"],
     "primary_account_id": "acct-6642"
+  },
+  {
+    "customer_id": "cus-3144",
+    "name": "Priya Shah",
+    "home_country": "US",
+    "segment": "retail-standard",
+    "kyc_risk": "low",
+    "emails": ["priya.shah@example.com"],
+    "primary_account_id": "acct-4314"
+  },
+  {
+    "customer_id": "cus-6682",
+    "name": "Harbor Ridge LLC",
+    "home_country": "US",
+    "segment": "small-business",
+    "kyc_risk": "medium",
+    "emails": ["finance@harborridge.example"],
+    "primary_account_id": "acct-8826"
+  },
+  {
+    "customer_id": "cus-5520",
+    "name": "Ethan Brooks",
+    "home_country": "US",
+    "segment": "retail-premier",
+    "kyc_risk": "medium",
+    "emails": ["ethan.brooks@example.com"],
+    "primary_account_id": "acct-2205"
   }
 ]

@@ -17,7 +17,7 @@ The current deployed demo runs on Cloud Run with authenticated access, backend-o
 | Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
 | Demo Dashboard | `/dashboard` shows case summary, agent findings, network links, Veritas signal, compliance, approval state, async job state, and Agent Registry. |
 | Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept or deny each case. |
-| Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions and avoids recent repeats. |
+| Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions with low, medium, high, and critical priorities while avoiding recent repeats. |
 | Async Demo Flow | `Run Async Demo` enqueues a Pub/Sub-style job, invokes the worker route, then loads the completed case. |
 | AI Provider | `vertex_ai` in Cloud Run, with `gemini-2.5-flash` configured backend-only. |
 | Memory | Firestore persists case snapshots, approval decisions, and async investigation jobs. |
@@ -54,13 +54,17 @@ TraceLayer will:
 5. Check for PII exposure, policy violations, and unsafe automation.
 6. Generate a case summary and request human approval for high-risk actions.
 
-The demo currently includes three flagged trigger scenarios:
+The demo currently includes seven flagged trigger scenarios:
 
-| Trigger | Scenario |
-| --- | --- |
-| `tx-9001` | High-value overseas wire transfer to Singapore with unusual timing and shared infrastructure. |
-| `tx-9101` | High-value UAE wire transfer with shared device, IP, and counterparty signals. |
-| `tx-9201` | Small-business ACH case with high amount, velocity, shared IP, and unusual-hour signals. |
+| Trigger | Expected Priority | Scenario |
+| --- | --- | --- |
+| `tx-9301` | Low | Low-value domestic card alert that remains open for analyst review. |
+| `tx-9401` | Medium | Moderate cross-border ACH vendor payment with limited supporting signals. |
+| `tx-9501` | Medium | Domestic high-value ACH payment with elevated federated signal but no immediate hold request. |
+| `tx-9201` | High | Small-business ACH case with high amount, velocity, shared IP, and unusual-hour signals. |
+| `tx-9601` | High | Cross-border wire with shared IP and unusual timing, requiring supervisor approval. |
+| `tx-9001` | Critical | High-value overseas wire transfer to Singapore with unusual timing and shared infrastructure. |
+| `tx-9101` | Critical | High-value UAE wire transfer with shared device, IP, and counterparty signals. |
 
 ## Agent Fleet
 

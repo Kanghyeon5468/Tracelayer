@@ -52,7 +52,15 @@ def test_random_demo_uses_flagged_demo_transactions(tmp_path: Path, monkeypatch)
     fleet = _test_fleet(tmp_path)
     demo_ids = InvestigationRepository().list_demo_transaction_ids()
 
-    assert {"tx-9001", "tx-9101", "tx-9201"}.issubset(set(demo_ids))
+    assert {
+        "tx-9001",
+        "tx-9101",
+        "tx-9201",
+        "tx-9301",
+        "tx-9401",
+        "tx-9501",
+        "tx-9601",
+    }.issubset(set(demo_ids))
 
     monkeypatch.setattr(fleet_module.random, "choice", lambda values: "tx-9201")
     case = fleet.investigate_random_demo()
@@ -81,10 +89,30 @@ def test_random_demo_avoids_recent_demo_repeats(tmp_path: Path, monkeypatch) -> 
     assert second_case.trigger_transaction_id == "tx-9101"
     assert third_case.trigger_transaction_id == "tx-9201"
     assert candidate_sets == [
-        ["tx-9001", "tx-9101", "tx-9201"],
-        ["tx-9101", "tx-9201"],
-        ["tx-9201"],
+        ["tx-9001", "tx-9101", "tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601"],
+        ["tx-9101", "tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601"],
+        ["tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601"],
     ]
+
+
+def test_demo_scenarios_cover_risk_priority_range(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+    results = {
+        transaction_id: fleet.investigate(transaction_id, create_case_run=True)
+        for transaction_id in InvestigationRepository().list_demo_transaction_ids()
+    }
+
+    priorities = {case.priority for case in results.values()}
+
+    assert {"low", "medium", "high", "critical"}.issubset(priorities)
+    assert results["tx-9301"].risk_score < 40
+    assert results["tx-9401"].priority == "medium"
+    assert results["tx-9501"].priority == "medium"
+    assert results["tx-9601"].priority == "high"
+    assert results["tx-9301"].approval_request is None
+    assert results["tx-9401"].approval_request is None
+    assert results["tx-9501"].approval_request is None
+    assert results["tx-9601"].approval_request is not None
 
 
 def test_network_agent_records_search_backend_metadata(tmp_path: Path) -> None:
