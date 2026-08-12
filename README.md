@@ -8,6 +8,21 @@ Secrets never belong in the dashboard. The browser calls the TraceLayer backend 
 
 The project is designed for the **Fortified Enterprise Fleet** track of the All Things Agentic Hackathon. It demonstrates enterprise agent concepts such as agent identity, persistent memory, guarded model calls, policy-aware tool access, asynchronous work distribution, and human-in-the-loop controls.
 
+## Current Demo Status
+
+The current deployed demo runs on Cloud Run with authenticated access, backend-only Vertex AI Gemini calls, Firestore-backed case/job state, randomized fraud scenarios, and a supervisor admin console.
+
+| Area | Current Status |
+| --- | --- |
+| Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
+| Demo Dashboard | `/dashboard` shows case summary, agent findings, network links, Veritas signal, compliance, approval state, async job state, and Agent Registry. |
+| Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept or deny each case. |
+| Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions and avoids recent repeats. |
+| Async Demo Flow | `Run Async Demo` enqueues a Pub/Sub-style job, invokes the worker route, then loads the completed case. |
+| AI Provider | `vertex_ai` in Cloud Run, with `gemini-2.5-flash` configured backend-only. |
+| Memory | Firestore persists case snapshots, approval decisions, and async investigation jobs. |
+| Network Search | BigQuery-aware connector runs in `auto` mode and safely falls back to local demo data if BigQuery is not ready. |
+
 ## Current Build Depth
 
 TraceLayer now includes concrete enterprise controls in the runnable backend:
@@ -22,6 +37,9 @@ TraceLayer now includes concrete enterprise controls in the runnable backend:
 | Audit Ledger | `AuditLedger` writes hash-chained JSONL events for tamper-evident review. |
 | Human Approval | High-risk actions produce approval requests; final action requires supervisor approval. |
 | Embedded Veritas Federation | `VeritasFederatedRiskEngine` produces cross-institution risk signals without raw record movement. |
+| BigQuery Network Boundary | `BigQueryNetworkSearch` uses parameterized BigQuery queries when available and records fallback metadata. |
+| Async Job State | `InvestigationJob` stores queued/running/succeeded/failed state in local JSONL or Firestore. |
+| Agent Registry UI | Dashboard renders service accounts, permissions, versions, and data access classes from `/agents`. |
 
 ## Demo Scenario
 
@@ -35,6 +53,14 @@ TraceLayer will:
 4. Build a chronological evidence timeline from transaction, policy, and federated provenance data.
 5. Check for PII exposure, policy violations, and unsafe automation.
 6. Generate a case summary and request human approval for high-risk actions.
+
+The demo currently includes three flagged trigger scenarios:
+
+| Trigger | Scenario |
+| --- | --- |
+| `tx-9001` | High-value overseas wire transfer to Singapore with unusual timing and shared infrastructure. |
+| `tx-9101` | High-value UAE wire transfer with shared device, IP, and counterparty signals. |
+| `tx-9201` | Small-business ACH case with high amount, velocity, shared IP, and unusual-hour signals. |
 
 ## Agent Fleet
 
@@ -119,6 +145,13 @@ Open the API:
 http://localhost:8080/docs
 ```
 
+Open local UI pages through the API server:
+
+```text
+http://localhost:8080/dashboard
+http://localhost:8080/admin
+```
+
 Run the demo case:
 
 ```bash
@@ -154,16 +187,20 @@ curl http://localhost:8080/audit/verify \
   -H "X-Tracelayer-Role: compliance"
 ```
 
-Open the static dashboard:
+Run the Pub/Sub-style async demo flow locally:
 
-```text
-apps/dashboard/index.html
-```
+```bash
+JOB_ID=$(curl -s -X POST http://localhost:8080/cases/demo/async \
+  -H "X-Tracelayer-User: supervisor@example.com" \
+  -H "X-Tracelayer-Role: supervisor" \
+  | python -c "import json,sys; print(json.load(sys.stdin)['job_id'])")
 
-Open the supervisor approval console:
+curl -X POST "http://localhost:8080/jobs/$JOB_ID/run" \
+  -H "X-Tracelayer-User: supervisor@example.com" \
+  -H "X-Tracelayer-Role: supervisor"
 
-```text
-apps/dashboard/admin.html
+curl "http://localhost:8080/jobs/$JOB_ID" \
+  -H "X-Tracelayer-Role: supervisor"
 ```
 
 The dashboard can call the local API if it is running. Otherwise, it falls back to an embedded demo case. To point the dashboard at a deployed backend, copy `apps/dashboard/config.example.js` to `apps/dashboard/config.js` and set only the backend URL:
@@ -174,6 +211,40 @@ window.TRACELAYER_API_BASE = "https://YOUR_CLOUD_RUN_URL";
 
 Do not put Gemini, Google Cloud, or API keys in dashboard files.
 
+## Deployed Demo Access
+
+The deployed Cloud Run service is private. Use a local authenticated proxy:
+
+```bash
+gcloud run services proxy tracelayer-api \
+  --region us-central1 \
+  --project project-6ecbea1e-e0c3-4325-a63 \
+  --port 8099
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8099/dashboard
+http://127.0.0.1:8099/admin
+```
+
+Use the demo API key when the admin console asks for it:
+
+```text
+local-demo-key
+```
+
+Expected demo path:
+
+1. Open `/dashboard`.
+2. Click `Run Demo Case` for synchronous investigation.
+3. Click `Run Async Demo` to show queued job state and worker completion.
+4. Review `Agent Registry` to show agent identity, permissions, and data access.
+5. Open `/admin`.
+6. Approve or deny pending cases.
+7. Return to `/dashboard` and confirm the approval status updates through browser live sync.
+
 ## Google Cloud Mapping
 
 | Capability | Local Skeleton | Google Cloud Target |
@@ -181,12 +252,30 @@ Do not put Gemini, Google Cloud, or API keys in dashboard files.
 | Runtime | FastAPI process | Cloud Run |
 | Agent framework boundary | Agent classes under `services/api/app/agents` | Google ADK or GenAI SDK agent wrappers |
 | Transaction store | JSON files in `data/` | Firestore, Cloud SQL, or BigQuery |
-| Related transaction search | In-memory graph search | BigQuery |
-| Async work distribution | Direct orchestrator call | Pub/Sub topics |
-| Memory bank | Local JSONL append-only snapshots | Firestore case documents with append-only snapshot subcollections |
-| Model calls | Mock reasoner by default | Gemini 3.5 Flash or newer via Vertex AI/Gemini API |
+| Related transaction search | JSON repository fallback | BigQuery via `BigQueryNetworkSearch` |
+| Async work distribution | Job enqueue plus worker route | Pub/Sub topic and worker service |
+| Memory bank | Local JSONL append-only snapshots | Firestore case and job collections |
+| Model calls | Mock, Gemini API, or Vertex AI | Gemini through Vertex AI with service account credentials |
 | Guardrails | Compliance checks and redaction utilities | Model Armor and Agent Gateway policies |
 | Audit evidence | Markdown report output | Cloud Logging, Trace, BigQuery audit tables, PDF export |
+
+## API Surface
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /runtime/config` | Returns safe runtime metadata without secrets. |
+| `GET /agents` | Lists registered agent identities, permissions, and data access classes. |
+| `POST /cases/demo` | Runs a randomized synchronous demo investigation. |
+| `POST /cases/demo/async` | Enqueues a Pub/Sub-style investigation job. |
+| `POST /jobs/{job_id}/run` | Runs the worker step for a queued investigation job. |
+| `GET /jobs/{job_id}` | Reads async job status and generated case ID. |
+| `POST /cases/investigate` | Runs investigation for an explicit transaction ID. |
+| `GET /cases/{case_id}` | Reads a persisted case from the memory bank. |
+| `GET /approvals/pending` | Lists pending supervisor approval requests. |
+| `GET /approvals/log` | Lists pending, approved, and denied approval history. |
+| `POST /cases/{case_id}/approval` | Accepts or denies a human approval request. |
+| `GET /cases/{case_id}/audit` | Reads hash-chained audit events for a case. |
+| `GET /audit/verify` | Verifies the local audit chain. |
 
 ## Environment Variables
 
