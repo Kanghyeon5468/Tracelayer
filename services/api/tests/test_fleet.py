@@ -110,8 +110,10 @@ def test_demo_scenarios_cover_risk_priority_range(tmp_path: Path) -> None:
     assert results["tx-9501"].priority == "medium"
     assert results["tx-9601"].priority == "high"
     assert results["tx-9301"].approval_request is None
-    assert results["tx-9401"].approval_request is None
-    assert results["tx-9501"].approval_request is None
+    assert results["tx-9401"].approval_request is not None
+    assert results["tx-9401"].approval_request.action == "manual_case_review"
+    assert results["tx-9501"].approval_request is not None
+    assert results["tx-9501"].approval_request.action == "manual_case_review"
     assert results["tx-9601"].approval_request is not None
 
 

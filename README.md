@@ -35,7 +35,7 @@ TraceLayer now includes concrete enterprise controls in the runnable backend:
 | Model Armor Boundary | `ModelArmorGuardrail` scans model inputs and outputs for prompt injection and PII. |
 | Memory Bank | `MemoryBank` stores append-only local snapshots; `FirestoreMemoryBank` stores deployed case state and approval updates. |
 | Audit Ledger | `AuditLedger` writes hash-chained JSONL events for tamper-evident review. |
-| Human Approval | High-risk actions produce approval requests; final action requires supervisor approval. |
+| Human Approval | Medium-risk cases create manual review requests; high-risk actions require supervisor approval before any hold. |
 | Embedded Veritas Federation | `VeritasFederatedRiskEngine` produces cross-institution risk signals without raw record movement. |
 | BigQuery Network Boundary | `BigQueryNetworkSearch` uses parameterized BigQuery queries when available and records fallback metadata. |
 | Async Job State | `InvestigationJob` stores queued/running/succeeded/failed state in local JSONL or Firestore. |
@@ -52,15 +52,15 @@ TraceLayer will:
 3. Find related accounts, devices, IP addresses, emails, and counterparties.
 4. Build a chronological evidence timeline from transaction, policy, and federated provenance data.
 5. Check for PII exposure, policy violations, and unsafe automation.
-6. Generate a case summary and request human approval for high-risk actions.
+6. Generate a case summary, route medium-risk cases to analyst review, and request supervisor approval for high-risk actions.
 
 The demo currently includes seven flagged trigger scenarios:
 
 | Trigger | Expected Priority | Scenario |
 | --- | --- | --- |
 | `tx-9301` | Low | Low-value domestic card alert that remains open for analyst review. |
-| `tx-9401` | Medium | Moderate cross-border ACH vendor payment with limited supporting signals. |
-| `tx-9501` | Medium | Domestic high-value ACH payment with elevated federated signal but no immediate hold request. |
+| `tx-9401` | Medium | Moderate cross-border ACH vendor payment routed to manual analyst review without an asset hold request. |
+| `tx-9501` | Medium | Domestic high-value ACH payment with elevated federated signal, routed to manual review before closure. |
 | `tx-9201` | High | Small-business ACH case with high amount, velocity, shared IP, and unusual-hour signals. |
 | `tx-9601` | High | Cross-border wire with shared IP and unusual timing, requiring supervisor approval. |
 | `tx-9001` | Critical | High-value overseas wire transfer to Singapore with unusual timing and shared infrastructure. |
@@ -74,7 +74,7 @@ The demo currently includes seven flagged trigger scenarios:
 | Network Agent | Finds links across accounts, devices, IPs, emails, and counterparties. |
 | Evidence Agent | Builds the evidence timeline from transaction records and internal policy. |
 | Compliance Agent | Checks PII exposure, access boundaries, policy conflicts, and tool safety. |
-| Case Manager Agent | Maintains case state and requests human approval for high-risk actions. |
+| Case Manager Agent | Maintains case state, routes medium-risk cases to analyst review, and requests supervisor approval for high-risk actions. |
 
 ## Embedded Veritas Layer
 

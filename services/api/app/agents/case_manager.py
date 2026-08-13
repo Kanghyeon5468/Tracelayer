@@ -28,6 +28,16 @@ class CaseManagerAgent(BaseInvestigationAgent):
                     "device or IP signals. A human reviewer must approve any hold."
                 ),
             )
+        elif context.priority == Priority.MEDIUM:
+            context.status = CaseStatus.NEEDS_APPROVAL
+            context.approval_request = ApprovalRequest(
+                approval_id=f"appr-{context.case_id}",
+                action="manual_case_review",
+                reason=(
+                    "The case contains medium-risk anomaly signals. A human analyst "
+                    "must review the case before it is closed; no autonomous hold is requested."
+                ),
+            )
         else:
             context.status = CaseStatus.OPEN
 
@@ -35,7 +45,7 @@ class CaseManagerAgent(BaseInvestigationAgent):
             agent_id=self.identity.agent_id,
             summary=(
                 f"Case moved to {context.status}. "
-                "Generated a human approval request for high-risk action."
+                "Generated a human review request for analyst or supervisor decision."
                 if context.approval_request
                 else f"Case remains {context.status} for analyst review."
             ),
