@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.agents.base import BaseInvestigationAgent
 from app.connectors.reasoner import GeminiReasoner
-from app.domain.models import AgentIdentity, AgentOutput, InvestigationContext, Priority
+from app.domain.models import AgentIdentity, AgentOutput, InvestigationContext, RiskPolicy
 from app.domain.policies import classify_transfer_amount
 from app.federation.engine import VeritasFederatedRiskEngine
 
@@ -15,10 +15,12 @@ class TriageAgent(BaseInvestigationAgent):
         identity: AgentIdentity,
         reasoner: GeminiReasoner,
         federated_engine: VeritasFederatedRiskEngine | None = None,
+        risk_policy: RiskPolicy | None = None,
     ) -> None:
         self.identity = identity
         self.reasoner = reasoner
         self.federated_engine = federated_engine or VeritasFederatedRiskEngine()
+        self.risk_policy = risk_policy or RiskPolicy()
 
     def run(self, context: InvestigationContext) -> AgentOutput:
         transaction = context.trigger_transaction
@@ -96,7 +98,7 @@ class TriageAgent(BaseInvestigationAgent):
             )
 
         context.risk_score = min(score, 100)
-        context.priority = self._priority_for_score(context.risk_score)
+        context.priority = self.risk_policy.priority_for_score(context.risk_score)
 
         prompt = (
             "Explain the fraud risk pattern for a flagged transaction using concise, "
@@ -124,20 +126,16 @@ class TriageAgent(BaseInvestigationAgent):
                 "federated_risk_score": federated_signal.federated_risk_score,
                 "campaign_signature": federated_signal.campaign_signature,
                 "dp_epsilon": federated_signal.differential_privacy["epsilon"],
+                "risk_policy": {
+                    "policy_id": self.risk_policy.policy_id,
+                    "medium_threshold": self.risk_policy.medium_threshold,
+                    "high_threshold": self.risk_policy.high_threshold,
+                    "critical_threshold": self.risk_policy.critical_threshold,
+                },
             },
         )
         context.agent_outputs.append(output)
         return output
-
-    @staticmethod
-    def _priority_for_score(score: int) -> Priority:
-        if score >= 90:
-            return Priority.CRITICAL
-        if score >= 70:
-            return Priority.HIGH
-        if score >= 40:
-            return Priority.MEDIUM
-        return Priority.LOW
 
     @staticmethod
     def _model_safe_transaction_features(context: InvestigationContext) -> dict:

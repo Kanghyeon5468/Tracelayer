@@ -13,6 +13,7 @@ ROLE_SCOPES: dict[ActorRole, set[str]] = {
         "cases.investigate",
         "evidence.read",
         "reports.read",
+        "risk_policy.read",
     },
     ActorRole.SUPERVISOR: {
         "agents.read",
@@ -21,6 +22,8 @@ ROLE_SCOPES: dict[ActorRole, set[str]] = {
         "evidence.read",
         "reports.read",
         "approvals.decide",
+        "risk_policy.read",
+        "risk_policy.update",
     },
     ActorRole.COMPLIANCE: {
         "agents.read",
@@ -29,6 +32,7 @@ ROLE_SCOPES: dict[ActorRole, set[str]] = {
         "reports.read",
         "compliance.read",
         "audit.read",
+        "risk_policy.read",
     },
     ActorRole.SERVICE: {"*"},
 }

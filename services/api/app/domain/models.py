@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class CaseStatus(StrEnum):
@@ -18,6 +18,32 @@ class Priority(StrEnum):
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
+
+
+class RiskPolicy(BaseModel):
+    policy_id: str = "default"
+    medium_threshold: int = Field(default=40, ge=0, le=100)
+    high_threshold: int = Field(default=70, ge=0, le=100)
+    critical_threshold: int = Field(default=90, ge=0, le=100)
+    updated_by: str = "system"
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @model_validator(mode="after")
+    def validate_ordering(self) -> "RiskPolicy":
+        if not self.medium_threshold < self.high_threshold < self.critical_threshold:
+            raise ValueError(
+                "Risk thresholds must be ordered as medium < high < critical."
+            )
+        return self
+
+    def priority_for_score(self, score: int) -> Priority:
+        if score >= self.critical_threshold:
+            return Priority.CRITICAL
+        if score >= self.high_threshold:
+            return Priority.HIGH
+        if score >= self.medium_threshold:
+            return Priority.MEDIUM
+        return Priority.LOW
 
 
 class DataClassification(StrEnum):

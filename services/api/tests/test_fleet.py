@@ -8,8 +8,9 @@ from app.fleet import FraudInvestigationFleet
 from app.federation.secure_agg import secure_aggregate
 from app.memory.job_store import LocalInvestigationJobStore
 from app.memory.memory_bank import FirestoreMemoryBank, MemoryBank
+from app.memory.risk_policy_store import LocalRiskPolicyStore
 from app.observability.audit import AuditLedger
-from app.domain.models import ActorRole, ApprovalDecisionRequest, RequestContext
+from app.domain.models import ActorRole, ApprovalDecisionRequest, RequestContext, RiskPolicy
 from app.security.redaction import redact_case_for_role
 
 
@@ -115,6 +116,32 @@ def test_demo_scenarios_cover_risk_priority_range(tmp_path: Path) -> None:
     assert results["tx-9501"].approval_request is not None
     assert results["tx-9501"].approval_request.action == "manual_case_review"
     assert results["tx-9601"].approval_request is not None
+
+
+def test_supervisor_can_store_risk_threshold_policy(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+    supervisor = RequestContext(
+        actor_id="supervisor@example.com",
+        role=ActorRole.SUPERVISOR,
+        request_id="req-test-risk-policy",
+    )
+
+    saved_policy = fleet.update_risk_policy(
+        RiskPolicy(medium_threshold=50, high_threshold=75, critical_threshold=95),
+        supervisor,
+    )
+    loaded_policy = fleet.get_risk_policy(supervisor)
+    case = fleet.investigate("tx-9401", supervisor, create_case_run=True)
+    triage_output = next(
+        output for output in case.agent_outputs if output.agent_id == "triage-agent"
+    )
+
+    assert saved_policy.updated_by == "supervisor@example.com"
+    assert loaded_policy.medium_threshold == 50
+    assert case.risk_score == 40
+    assert case.priority == "low"
+    assert case.approval_request is None
+    assert triage_output.data["risk_policy"]["medium_threshold"] == 50
 
 
 def test_network_agent_records_search_backend_metadata(tmp_path: Path) -> None:
@@ -320,6 +347,7 @@ def _test_fleet(tmp_path: Path) -> FraudInvestigationFleet:
         report_writer=ReportWriter(tmp_path / "reports"),
         memory_bank=MemoryBank(settings, tmp_path / "memory.jsonl"),
         job_store=LocalInvestigationJobStore(settings, tmp_path / "jobs.jsonl"),
+        risk_policy_store=LocalRiskPolicyStore(settings, tmp_path / "risk-policy.json"),
         audit_ledger=AuditLedger(settings, tmp_path / "audit.jsonl"),
     )
 

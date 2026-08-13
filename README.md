@@ -16,7 +16,7 @@ The current deployed demo runs on Cloud Run with authenticated access, backend-o
 | --- | --- |
 | Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
 | Demo Dashboard | `/dashboard` shows case summary, agent findings, network links, Veritas signal, compliance, approval state, async job state, and Agent Registry. |
-| Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept or deny each case. |
+| Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept or deny each case and tune stored risk thresholds. |
 | Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions with low, medium, high, and critical priorities while avoiding recent repeats. |
 | Async Demo Flow | `Run Async Demo` enqueues a Pub/Sub-style job, invokes the worker route, then loads the completed case. |
 | AI Provider | `vertex_ai` in Cloud Run, with `gemini-2.5-flash` configured backend-only. |
@@ -35,6 +35,7 @@ TraceLayer now includes concrete enterprise controls in the runnable backend:
 | Model Armor Boundary | `ModelArmorGuardrail` scans model inputs and outputs for prompt injection and PII. |
 | Memory Bank | `MemoryBank` stores append-only local snapshots; `FirestoreMemoryBank` stores deployed case state and approval updates. |
 | Audit Ledger | `AuditLedger` writes hash-chained JSONL events for tamper-evident review. |
+| Risk Policy Store | `RiskPolicyStore` persists medium, high, and critical thresholds locally or in Firestore. |
 | Human Approval | Medium-risk cases create manual review requests; high-risk actions require supervisor approval before any hold. |
 | Embedded Veritas Federation | `VeritasFederatedRiskEngine` produces cross-institution risk signals without raw record movement. |
 | BigQuery Network Boundary | `BigQueryNetworkSearch` uses parameterized BigQuery queries when available and records fallback metadata. |
@@ -277,6 +278,8 @@ Expected demo path:
 | `GET /cases/{case_id}` | Reads a persisted case from the memory bank. |
 | `GET /approvals/pending` | Lists pending supervisor approval requests. |
 | `GET /approvals/log` | Lists pending, approved, and denied approval history. |
+| `GET /risk-policy` | Reads the active medium, high, and critical risk thresholds. |
+| `PUT /risk-policy` | Persists supervisor-updated risk thresholds for future investigations. |
 | `POST /cases/{case_id}/approval` | Accepts or denies a human approval request. |
 | `GET /cases/{case_id}/audit` | Reads hash-chained audit events for a case. |
 | `GET /audit/verify` | Verifies the local audit chain. |
@@ -301,6 +304,8 @@ Important values:
 | `FIRESTORE_DATABASE` | Firestore database ID for deployed case state. |
 | `FIRESTORE_CASE_COLLECTION` | Firestore collection for case records and snapshot history. |
 | `FIRESTORE_JOB_COLLECTION` | Firestore collection for async investigation job state. |
+| `FIRESTORE_POLICY_COLLECTION` | Firestore collection for active risk threshold policy. |
+| `RISK_POLICY_PATH` | Optional local JSON path for the active risk threshold policy. |
 | `SECURITY_MODE` | Use `permissive` locally and `enforcing` for deployed API-key checks. |
 | `AUDIT_LEDGER_PATH` | Local hash-chained audit log path. |
 | `MEMORY_BANK_PATH` | Local append-only case memory path. |

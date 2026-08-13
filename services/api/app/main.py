@@ -19,6 +19,7 @@ from app.domain.models import (
     InvestigationRequest,
     PendingApprovalSummary,
     RequestContext,
+    RiskPolicy,
 )
 from app.fleet import FraudInvestigationFleet
 from app.observability.audit import AuditLedger
@@ -153,6 +154,21 @@ def list_approval_log(
     request: RequestContext = Depends(get_request_context),
 ) -> list[ApprovalLogEntry]:
     return _run_or_raise(lambda: FraudInvestigationFleet(settings).list_approval_log(request))
+
+
+@app.get("/risk-policy", response_model=RiskPolicy)
+def get_risk_policy(request: RequestContext = Depends(get_request_context)) -> RiskPolicy:
+    return _run_or_raise(lambda: FraudInvestigationFleet(settings).get_risk_policy(request))
+
+
+@app.put("/risk-policy", response_model=RiskPolicy)
+def update_risk_policy(
+    policy: RiskPolicy,
+    request: RequestContext = Depends(get_request_context),
+) -> RiskPolicy:
+    return _run_or_raise(
+        lambda: FraudInvestigationFleet(settings).update_risk_policy(policy, request)
+    )
 
 
 @app.post("/cases/{case_id}/approval", response_model=InvestigationCase)

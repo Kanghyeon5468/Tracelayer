@@ -28,6 +28,7 @@ from app.domain.models import (
     InvestigationJobStatus,
     PendingApprovalSummary,
     RequestContext,
+    RiskPolicy,
 )
 from app.federation.engine import VeritasFederatedRiskEngine
 from app.gateway.agent_gateway import AgentGateway
@@ -38,6 +39,11 @@ from app.memory.job_store import (
     touch_job,
 )
 from app.memory.memory_bank import FirestoreMemoryBank, MemoryBank, create_memory_bank
+from app.memory.risk_policy_store import (
+    FirestoreRiskPolicyStore,
+    LocalRiskPolicyStore,
+    create_risk_policy_store,
+)
 from app.observability.audit import AuditLedger
 from app.security.context import build_service_context
 from app.security.guardrails import ModelArmorGuardrail
@@ -55,6 +61,7 @@ class FraudInvestigationFleet:
         bus: LocalPubSubBus | None = None,
         memory_bank: MemoryBank | FirestoreMemoryBank | None = None,
         job_store: LocalInvestigationJobStore | FirestoreInvestigationJobStore | None = None,
+        risk_policy_store: LocalRiskPolicyStore | FirestoreRiskPolicyStore | None = None,
         audit_ledger: AuditLedger | None = None,
         policy_engine: PolicyEngine | None = None,
         guardrail: ModelArmorGuardrail | None = None,
@@ -67,6 +74,7 @@ class FraudInvestigationFleet:
         self.bus = bus or LocalPubSubBus()
         self.memory_bank = memory_bank or create_memory_bank(settings)
         self.job_store = job_store or create_job_store(settings)
+        self.risk_policy_store = risk_policy_store or create_risk_policy_store(settings)
         self.audit_ledger = audit_ledger or AuditLedger(settings)
         self.policy_engine = policy_engine or PolicyEngine()
         self.guardrail = guardrail or ModelArmorGuardrail()
@@ -116,11 +124,13 @@ class FraudInvestigationFleet:
         )
 
         policy_text = self.repository.read_policy_text()
+        risk_policy = self.risk_policy_store.load_policy()
         agents = [
             TriageAgent(
                 self.registry.get("triage-agent"),
                 self.reasoner,
                 self.federated_engine,
+                risk_policy,
             ),
             NetworkAgent(self.registry.get("network-agent")),
             EvidenceAgent(self.registry.get("evidence-agent"), policy_text),
@@ -467,3 +477,48 @@ class FraudInvestigationFleet:
         )
         self.report_writer.write_markdown(updated_case)
         return updated_case
+
+    def get_risk_policy(self, request: RequestContext | None = None) -> RiskPolicy:
+        request = request or build_service_context()
+        actor_decision = self.policy_engine.actor_can(request, "risk_policy.read")
+        self.audit_ledger.record(
+            request=request,
+            action="risk_policy.read",
+            resource="default",
+            decision="allow" if actor_decision.allowed else "deny",
+            reason=actor_decision.reason,
+        )
+        if not actor_decision.allowed:
+            raise PermissionError(actor_decision.reason)
+        return self.risk_policy_store.load_policy()
+
+    def update_risk_policy(
+        self,
+        policy: RiskPolicy,
+        request: RequestContext | None = None,
+    ) -> RiskPolicy:
+        request = request or build_service_context()
+        actor_decision = self.policy_engine.actor_can(request, "risk_policy.update")
+        self.audit_ledger.record(
+            request=request,
+            action="risk_policy.update",
+            resource=policy.policy_id,
+            decision="allow" if actor_decision.allowed else "deny",
+            reason=actor_decision.reason,
+            metadata={
+                "medium_threshold": policy.medium_threshold,
+                "high_threshold": policy.high_threshold,
+                "critical_threshold": policy.critical_threshold,
+            },
+        )
+        if not actor_decision.allowed:
+            raise PermissionError(actor_decision.reason)
+
+        saved_policy = policy.model_copy(
+            update={
+                "policy_id": "default",
+                "updated_by": request.actor_id,
+                "updated_at": datetime.now(UTC),
+            }
+        )
+        return self.risk_policy_store.save_policy(saved_policy)

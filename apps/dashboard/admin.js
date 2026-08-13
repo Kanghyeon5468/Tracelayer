@@ -11,6 +11,7 @@ const adminState = {
   supervisorId: localStorage.getItem("tracelayer.supervisorId") || "supervisor@example.com",
   pendingApprovals: [],
   approvalLog: [],
+  riskPolicy: null,
   selectedCase: null,
 };
 const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("tracelayer-live") : null;
@@ -69,6 +70,7 @@ const saveSettings = () => {
   localStorage.setItem("tracelayer.supervisorId", adminState.supervisorId);
   setText("#last-action", "Settings Saved");
   loadRuntimeConfig();
+  loadRiskPolicy();
   loadPendingApprovals();
   loadApprovalLog();
 };
@@ -107,6 +109,59 @@ const loadRuntimeConfig = async () => {
     setText("#admin-runtime-status", `Backend: ${config.ai_provider} / ${config.gemini_model}`);
   } catch (error) {
     setText("#admin-runtime-status", "Backend: unavailable");
+  }
+};
+
+const renderRiskPolicyForm = () => {
+  if (!adminState.riskPolicy) {
+    return;
+  }
+
+  document.querySelector("#medium-threshold").value = adminState.riskPolicy.medium_threshold;
+  document.querySelector("#high-threshold").value = adminState.riskPolicy.high_threshold;
+  document.querySelector("#critical-threshold").value = adminState.riskPolicy.critical_threshold;
+  setText(
+    "#risk-policy-status",
+    `Policy: updated by ${adminState.riskPolicy.updated_by}`,
+  );
+};
+
+const loadRiskPolicy = async () => {
+  try {
+    adminState.riskPolicy = await apiFetch("/risk-policy");
+    renderRiskPolicyForm();
+  } catch (error) {
+    setText("#risk-policy-status", "Policy: unavailable");
+  }
+};
+
+const saveRiskPolicy = async () => {
+  const button = document.querySelector("#save-risk-policy");
+  const medium = Number.parseInt(document.querySelector("#medium-threshold").value, 10);
+  const high = Number.parseInt(document.querySelector("#high-threshold").value, 10);
+  const critical = Number.parseInt(document.querySelector("#critical-threshold").value, 10);
+
+  button.disabled = true;
+  button.textContent = "Saving";
+  try {
+    adminState.riskPolicy = await apiFetch("/risk-policy", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        policy_id: "default",
+        medium_threshold: medium,
+        high_threshold: high,
+        critical_threshold: critical,
+        updated_by: adminState.supervisorId,
+      }),
+    });
+    renderRiskPolicyForm();
+    setText("#last-action", "Thresholds Saved");
+  } catch (error) {
+    setText("#risk-policy-status", `Policy: ${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Save Thresholds";
   }
 };
 
@@ -364,6 +419,7 @@ const renderApprovalLogError = (error) => {
 
 document.querySelector("#save-settings").addEventListener("click", saveSettings);
 document.querySelector("#refresh-approvals").addEventListener("click", refreshAdminData);
+document.querySelector("#save-risk-policy").addEventListener("click", saveRiskPolicy);
 
 liveChannel?.addEventListener("message", (event) => {
   if (event.data?.type !== "case.updated") {
@@ -377,5 +433,6 @@ applySettingsToForm();
 renderApprovalQueue();
 renderSelectedCase();
 loadRuntimeConfig();
+loadRiskPolicy();
 loadPendingApprovals();
 loadApprovalLog();

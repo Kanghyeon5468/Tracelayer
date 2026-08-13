@@ -51,6 +51,30 @@
         </div>
       </section>
 
+      <section class="panel risk-policy-panel" aria-label="Risk threshold policy">
+        <header>
+          <div>
+            <h2>Risk Thresholds</h2>
+            <p id="risk-policy-status" class="runtime-status">Policy: loading</p>
+          </div>
+          <button id="save-risk-policy" type="button">Save Thresholds</button>
+        </header>
+        <div class="risk-policy-grid">
+          <label>
+            Medium
+            <input id="medium-threshold" type="number" min="0" max="100" step="1" />
+          </label>
+          <label>
+            High
+            <input id="high-threshold" type="number" min="0" max="100" step="1" />
+          </label>
+          <label>
+            Critical
+            <input id="critical-threshold" type="number" min="0" max="100" step="1" />
+          </label>
+        </div>
+      </section>
+
       <section class="admin-layout">
         <article class="panel">
           <h2>Pending Human Approvals</h2>
