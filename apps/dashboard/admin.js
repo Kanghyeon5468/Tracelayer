@@ -36,6 +36,12 @@ const setText = (selector, value) => {
   document.querySelector(selector).textContent = value;
 };
 
+const setRiskPolicyFeedback = (message, state = "neutral") => {
+  const node = document.querySelector("#risk-policy-feedback");
+  node.textContent = message;
+  node.className = `risk-policy-feedback ${state}`;
+};
+
 const clearChildren = (node) => {
   while (node.firstChild) {
     node.removeChild(node.firstChild);
@@ -122,7 +128,7 @@ const renderRiskPolicyForm = () => {
   document.querySelector("#critical-threshold").value = adminState.riskPolicy.critical_threshold;
   setText(
     "#risk-policy-status",
-    `Policy: updated by ${adminState.riskPolicy.updated_by}`,
+    `Policy: ${adminState.riskPolicy.medium_threshold}/${adminState.riskPolicy.high_threshold}/${adminState.riskPolicy.critical_threshold} · ${adminState.riskPolicy.updated_by}`,
   );
 };
 
@@ -130,39 +136,86 @@ const loadRiskPolicy = async () => {
   try {
     adminState.riskPolicy = await apiFetch("/risk-policy");
     renderRiskPolicyForm();
+    setRiskPolicyFeedback("");
   } catch (error) {
     setText("#risk-policy-status", "Policy: unavailable");
+    setRiskPolicyFeedback(error.message, "error");
   }
 };
 
-const saveRiskPolicy = async () => {
-  const button = document.querySelector("#save-risk-policy");
+const readRiskPolicyInputs = () => {
   const medium = Number.parseInt(document.querySelector("#medium-threshold").value, 10);
   const high = Number.parseInt(document.querySelector("#high-threshold").value, 10);
   const critical = Number.parseInt(document.querySelector("#critical-threshold").value, 10);
 
+  if ([medium, high, critical].some((value) => Number.isNaN(value))) {
+    throw new Error("Enter all threshold values.");
+  }
+  if ([medium, high, critical].some((value) => value < 0 || value > 100)) {
+    throw new Error("Thresholds must be between 0 and 100.");
+  }
+  if (!(medium < high && high < critical)) {
+    throw new Error("Use ascending thresholds: medium < high < critical.");
+  }
+
+  return { medium, high, critical };
+};
+
+const saveRiskPolicy = async () => {
+  const button = document.querySelector("#save-risk-policy");
+  let thresholds;
+
+  try {
+    thresholds = readRiskPolicyInputs();
+  } catch (error) {
+    setRiskPolicyFeedback(error.message, "error");
+    return;
+  }
+
   button.disabled = true;
   button.textContent = "Saving";
+  setRiskPolicyFeedback("Saving thresholds.", "neutral");
   try {
     adminState.riskPolicy = await apiFetch("/risk-policy", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         policy_id: "default",
-        medium_threshold: medium,
-        high_threshold: high,
-        critical_threshold: critical,
+        medium_threshold: thresholds.medium,
+        high_threshold: thresholds.high,
+        critical_threshold: thresholds.critical,
         updated_by: adminState.supervisorId,
       }),
     });
     renderRiskPolicyForm();
+    await loadRiskPolicy();
+    await refreshAdminData();
+    publishRiskPolicyUpdate(adminState.riskPolicy, "admin.risk_policy_saved");
+    button.textContent = "Saved";
+    document.querySelector(".risk-policy-panel").classList.add("saved");
+    const savedAt = new Date(adminState.riskPolicy.updated_at).toLocaleTimeString();
+    setRiskPolicyFeedback(`Saved at ${savedAt}. New investigations use this policy.`, "success");
     setText("#last-action", "Thresholds Saved");
   } catch (error) {
-    setText("#risk-policy-status", `Policy: ${error.message}`);
+    setRiskPolicyFeedback(error.message, "error");
   } finally {
-    button.disabled = false;
-    button.textContent = "Save Thresholds";
+    window.setTimeout(() => {
+      button.disabled = false;
+      button.textContent = "Save Thresholds";
+      document.querySelector(".risk-policy-panel").classList.remove("saved");
+    }, 900);
   }
+};
+
+const publishRiskPolicyUpdate = (policy, source) => {
+  const event = {
+    type: "risk_policy.updated",
+    source,
+    policy,
+    sent_at: new Date().toISOString(),
+  };
+  liveChannel?.postMessage(event);
+  localStorage.setItem("tracelayer.liveRiskPolicyEvent", JSON.stringify(event));
 };
 
 const loadPendingApprovals = async () => {
@@ -291,12 +344,15 @@ const renderSelectedCase = () => {
   }
 
   const caseData = adminState.selectedCase;
+  const triageOutput = caseData.agent_outputs.find((output) => output.agent_id === "triage-agent");
+  const riskPolicy = triageOutput?.data?.risk_policy;
   const summary = createNode("div", "case-summary-list");
   [
     ["Case", caseData.case_id],
     ["Status", titleCase(caseData.status)],
     ["Risk", String(caseData.risk_score)],
     ["Priority", titleCase(caseData.priority)],
+    ["Policy", riskPolicy ? `${riskPolicy.medium_threshold}/${riskPolicy.high_threshold}/${riskPolicy.critical_threshold}` : "-"],
     ["Transaction", caseData.trigger_transaction_id],
     ["Customer", caseData.customer_id],
   ].forEach(([label, value]) => {
@@ -422,11 +478,13 @@ document.querySelector("#refresh-approvals").addEventListener("click", refreshAd
 document.querySelector("#save-risk-policy").addEventListener("click", saveRiskPolicy);
 
 liveChannel?.addEventListener("message", (event) => {
-  if (event.data?.type !== "case.updated") {
-    return;
+  if (event.data?.type === "case.updated") {
+    loadPendingApprovals();
+    loadApprovalLog();
   }
-  loadPendingApprovals();
-  loadApprovalLog();
+  if (event.data?.type === "risk_policy.updated") {
+    loadRiskPolicy();
+  }
 });
 
 applySettingsToForm();
