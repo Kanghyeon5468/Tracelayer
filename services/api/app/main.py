@@ -28,6 +28,14 @@ from app.security.policy import PolicyEngine
 from app.security.redaction import redact_case_for_role
 
 
+class NoCacheStaticFiles(StaticFiles):
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        return response
+
+
 def _find_dashboard_path() -> str | None:
     for parent in Path(__file__).resolve().parents:
         candidate = parent / "apps" / "dashboard"
@@ -52,7 +60,7 @@ app.add_middleware(
 
 dashboard_path = _find_dashboard_path()
 if dashboard_path:
-    app.mount("/console", StaticFiles(directory=dashboard_path, html=True), name="console")
+    app.mount("/console", NoCacheStaticFiles(directory=dashboard_path, html=True), name="console")
 
 
 @app.get("/health")

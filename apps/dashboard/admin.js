@@ -42,6 +42,8 @@ const setRiskPolicyFeedback = (message, state = "neutral") => {
   node.className = `risk-policy-feedback ${state}`;
 };
 
+const buildApiUrl = (path) => `${adminState.apiBaseUrl.replace(/\/+$/, "")}${path}`;
+
 const clearChildren = (node) => {
   while (node.firstChild) {
     node.removeChild(node.firstChild);
@@ -66,7 +68,9 @@ const applySettingsToForm = () => {
 };
 
 const saveSettings = () => {
-  adminState.apiBaseUrl = document.querySelector("#api-base-url").value.trim() || DEFAULT_API_BASE_URL;
+  adminState.apiBaseUrl = (
+    document.querySelector("#api-base-url").value.trim() || DEFAULT_API_BASE_URL
+  ).replace(/\/+$/, "");
   adminState.apiKey = document.querySelector("#api-key").value.trim();
   adminState.supervisorId =
     document.querySelector("#supervisor-id").value.trim() || "supervisor@example.com";
@@ -82,7 +86,7 @@ const saveSettings = () => {
 };
 
 const apiFetch = async (path, options = {}) => {
-  const response = await fetch(`${adminState.apiBaseUrl}${path}`, {
+  const response = await fetch(buildApiUrl(path), {
     ...options,
     headers: {
       ...headers(),
@@ -194,7 +198,10 @@ const saveRiskPolicy = async () => {
     button.textContent = "Saved";
     document.querySelector(".risk-policy-panel").classList.add("saved");
     const savedAt = new Date(adminState.riskPolicy.updated_at).toLocaleTimeString();
-    setRiskPolicyFeedback(`Saved at ${savedAt}. New investigations use this policy.`, "success");
+    setRiskPolicyFeedback(
+      `Saved ${adminState.riskPolicy.medium_threshold}/${adminState.riskPolicy.high_threshold}/${adminState.riskPolicy.critical_threshold} at ${savedAt}. New investigations use this policy.`,
+      "success",
+    );
     setText("#last-action", "Thresholds Saved");
   } catch (error) {
     setRiskPolicyFeedback(error.message, "error");
