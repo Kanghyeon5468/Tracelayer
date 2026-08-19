@@ -349,7 +349,7 @@ label {
 }
 
 .network-graph {
-  min-height: 420px;
+  min-height: 480px;
 }
 
 .network-graph-stage {
@@ -362,7 +362,7 @@ label {
 .network-graph-viewport {
   position: relative;
   width: 100%;
-  min-height: 390px;
+  min-height: 450px;
   overflow: hidden;
   border-radius: 8px;
   background:
@@ -851,7 +851,7 @@ label {
   }
 
   .network-graph-viewport {
-    min-height: 330px;
+    min-height: 380px;
   }
 
   .registry-grid {

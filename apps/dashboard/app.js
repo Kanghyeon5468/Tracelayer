@@ -321,7 +321,7 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
   scene.background = new THREE.Color(0xf8fbfe);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.set(0, 0.4, 8.2);
+  camera.position.set(0, 0.6, 10.4);
 
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -372,7 +372,7 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
 
   positionedNodes.forEach((node) => {
     const tone = nodeTone(node.type);
-    const geometry = new THREE.SphereGeometry(node.type === "trigger_transaction" ? 0.28 : 0.2, 32, 18);
+    const geometry = new THREE.SphereGeometry(node.type === "trigger_transaction" ? 0.3 : 0.18, 32, 18);
     const material = new THREE.MeshStandardMaterial({
       color: tone === "trigger" ? 0xb42318 : tone === "related" ? 0x0f766e : 0x3b5b7a,
       roughness: 0.42,
@@ -387,7 +387,7 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
     graphGroup.add(mesh);
 
     const label = createLabelSprite(THREE, node.label);
-    label.position.copy(node.position).add(new THREE.Vector3(0, -0.42, 0));
+    label.position.copy(node.position).add(new THREE.Vector3(0, -0.5, 0));
     graphGroup.add(label);
   });
 
@@ -440,12 +440,12 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
   };
   const onWheel = (event) => {
     event.preventDefault();
-    camera.position.z = Math.max(4.4, Math.min(11, camera.position.z + event.deltaY * 0.006));
+    camera.position.z = Math.max(5.8, Math.min(14, camera.position.z + event.deltaY * 0.007));
   };
   const onReset = () => {
     controls.targetRotationX = -0.24;
     controls.targetRotationY = 0.48;
-    camera.position.set(0, 0.4, 8.2);
+    camera.position.set(0, 0.6, 10.4);
     updateGraphSelection(selection, null, graph);
   };
   const resetButton = document.querySelector("#reset-graph-view");
@@ -491,6 +491,10 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
 const positionGraphNodes3d = (THREE, nodes) => {
   const trigger = nodes.find((node) => node.type === "trigger_transaction") || nodes[0];
   const others = nodes.filter((node) => node.id !== trigger.id);
+  const relatedNodes = others.filter((node) => node.type === "related_transaction");
+  const entityNodes = others.filter((node) => node.type !== "related_transaction");
+  const relatedRadius = 3.45 + Math.min(relatedNodes.length, 10) * 0.05;
+  const entityRadius = 2.25 + Math.min(entityNodes.length, 10) * 0.04;
   const positioned = [
     {
       ...trigger,
@@ -498,17 +502,28 @@ const positionGraphNodes3d = (THREE, nodes) => {
     },
   ];
 
-  others.forEach((node, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(others.length, 1);
-    const isTransaction = node.type === "related_transaction";
-    const radius = isTransaction ? 2.45 : 1.65;
-    const z = isTransaction ? Math.sin(angle * 1.7) * 0.9 : Math.cos(angle * 1.4) * 0.55;
+  relatedNodes.forEach((node, index) => {
+    const angle = (Math.PI * 2 * index) / Math.max(relatedNodes.length, 1) - Math.PI / 2;
     positioned.push({
       ...node,
       position: new THREE.Vector3(
-        Math.cos(angle) * radius,
-        Math.sin(angle) * radius * 0.72,
-        z,
+        Math.cos(angle) * relatedRadius,
+        Math.sin(angle) * relatedRadius * 0.74,
+        Math.sin(angle * 1.6) * 1.35,
+      ),
+    });
+  });
+
+  entityNodes.forEach((node, index) => {
+    const angle =
+      (Math.PI * 2 * index) / Math.max(entityNodes.length, 1) +
+      Math.PI / Math.max(entityNodes.length, 2);
+    positioned.push({
+      ...node,
+      position: new THREE.Vector3(
+        Math.cos(angle) * entityRadius,
+        Math.sin(angle) * entityRadius * 0.68,
+        Math.cos(angle * 1.5) * 0.95,
       ),
     });
   });
