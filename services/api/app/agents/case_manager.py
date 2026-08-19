@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.adk_runtime import AdkAgentRuntime
 from app.agents.base import BaseInvestigationAgent
 from app.domain.models import (
     AgentIdentity,
@@ -17,8 +18,13 @@ from app.domain.models import (
 class CaseManagerPlanningAgent(BaseInvestigationAgent):
     required_permissions = ["case.write", "reports.write"]
 
-    def __init__(self, identity: AgentIdentity) -> None:
+    def __init__(
+        self,
+        identity: AgentIdentity,
+        adk_runtime: AdkAgentRuntime | None = None,
+    ) -> None:
         self.identity = identity
+        self.adk_runtime = adk_runtime
 
     def run(self, context: InvestigationContext) -> AgentOutput:
         plan = self._build_plan(context)
@@ -36,10 +42,24 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
                 "strategy": plan.strategy,
                 "planned_agents": [step.agent_id for step in plan.steps],
                 "step_count": len(plan.steps),
+                "adk_runtime": self._adk_binding(),
             },
         )
         context.agent_outputs.append(output)
         return output
+
+    def _adk_binding(self) -> dict:
+        if not self.adk_runtime:
+            return {"enabled": False, "available": False, "framework": "google_adk"}
+        return self.adk_runtime.bind_agent(
+            self.identity,
+            description="Creates adaptive fraud investigation plans for agent fleets.",
+            instruction=(
+                "You are TraceLayer's Case Manager Agent. Create a case-specific "
+                "investigation plan after triage. Choose only the agents needed for "
+                "the current priority, missing-data state, and approval policy."
+            ),
+        ).as_dict()
 
     def _build_plan(self, context: InvestigationContext) -> InvestigationPlan:
         completed_triage = InvestigationPlanStep(
@@ -166,8 +186,13 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
 class CaseManagerAgent(BaseInvestigationAgent):
     required_permissions = ["case.write", "approvals.request", "reports.write"]
 
-    def __init__(self, identity: AgentIdentity) -> None:
+    def __init__(
+        self,
+        identity: AgentIdentity,
+        adk_runtime: AdkAgentRuntime | None = None,
+    ) -> None:
         self.identity = identity
+        self.adk_runtime = adk_runtime
 
     def run(self, context: InvestigationContext) -> AgentOutput:
         if (
@@ -223,7 +248,21 @@ class CaseManagerAgent(BaseInvestigationAgent):
                 "approval_id": (
                     context.approval_request.approval_id if context.approval_request else None
                 ),
+                "adk_runtime": self._adk_binding(),
             },
         )
         context.agent_outputs.append(output)
         return output
+
+    def _adk_binding(self) -> dict:
+        if not self.adk_runtime:
+            return {"enabled": False, "available": False, "framework": "google_adk"}
+        return self.adk_runtime.bind_agent(
+            self.identity,
+            description="Manages fraud case state and human approval requests.",
+            instruction=(
+                "You are TraceLayer's Case Manager Agent. Convert investigation context "
+                "into an auditable case state, request human review when policy requires "
+                "it, and never execute a financial hold autonomously."
+            ),
+        ).as_dict()

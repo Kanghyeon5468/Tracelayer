@@ -199,6 +199,23 @@ def test_network_agent_records_search_backend_metadata(tmp_path: Path) -> None:
     assert network_output.data["search"]["result_count"] >= 1
 
 
+def test_core_agents_record_google_adk_runtime_metadata(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    case = fleet.investigate("tx-9001")
+    runtime_by_agent = {
+        output.agent_id: output.data["adk_runtime"]
+        for output in case.agent_outputs
+        if output.agent_id in {"triage-agent", "network-agent", "case-manager-agent"}
+    }
+
+    assert {"triage-agent", "network-agent", "case-manager-agent"} == set(runtime_by_agent)
+    for runtime in runtime_by_agent.values():
+        assert runtime["enabled"] is True
+        assert runtime["framework"] == "google_adk"
+        assert runtime["model"] == "gemini-2.5-flash" or runtime["available"] is False
+
+
 def test_async_demo_job_persists_status_and_case_id(tmp_path: Path) -> None:
     fleet = _test_fleet(tmp_path)
 

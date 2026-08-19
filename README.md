@@ -10,7 +10,7 @@ The project is designed for the **Fortified Enterprise Fleet** track of the All 
 
 ## Current Demo Status
 
-The current deployed demo runs on Cloud Run with authenticated access, backend-only Vertex AI Gemini calls, Firestore-backed case/job state, randomized fraud scenarios, and a supervisor admin console.
+The current deployed demo runs on Cloud Run with authenticated access, backend-only Vertex AI Gemini calls, Google ADK agent definitions for the core fleet, Firestore-backed case/job state, randomized fraud scenarios, and a supervisor admin console.
 
 | Area | Current Status |
 | --- | --- |
@@ -20,6 +20,7 @@ The current deployed demo runs on Cloud Run with authenticated access, backend-o
 | Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions with low, medium, high, and critical priorities while avoiding recent repeats. |
 | Async Demo Flow | `Run Async Demo` enqueues a Pub/Sub-style job, invokes the worker route, then loads the completed case. |
 | AI Provider | `vertex_ai` in Cloud Run, with `gemini-2.5-flash` configured backend-only. |
+| Google ADK | Triage, Network, and Case Manager agents bind to real `google.adk` `Agent` definitions when the package is installed. |
 | Memory | Firestore persists case snapshots, approval decisions, and async investigation jobs. |
 | Network Search | BigQuery-aware connector runs in `auto` mode and safely falls back to local demo data if BigQuery is not ready. |
 
@@ -30,6 +31,7 @@ TraceLayer now includes concrete enterprise controls in the runnable backend:
 | Control | Implementation |
 | --- | --- |
 | Agent Identity | `AgentRegistry` assigns service identities, versions, permissions, and data access classes. |
+| Google ADK Runtime | `AdkAgentRuntime` creates Google ADK `Agent` definitions for Triage, Network, and Case Manager and records runtime metadata in each case output. |
 | Agent Gateway | `AgentGateway` authorizes every agent run before execution. |
 | Dynamic Planning | `CaseManagerPlanningAgent` creates a case-specific investigation plan after triage; the fleet executes only the selected steps. |
 | Least Privilege | `PolicyEngine` checks role scopes, agent permissions, and data classification. |
@@ -265,7 +267,7 @@ Expected demo path:
 | Capability | Local Skeleton | Google Cloud Target |
 | --- | --- | --- |
 | Runtime | FastAPI process | Cloud Run |
-| Agent framework boundary | Agent classes under `services/api/app/agents` | Google ADK or GenAI SDK agent wrappers |
+| Agent framework boundary | `AdkAgentRuntime` plus agent classes under `services/api/app/agents` | Google ADK agent runtime with GenAI/Vertex model access |
 | Transaction store | JSON files in `data/` | Firestore, Cloud SQL, or BigQuery |
 | Related transaction search | JSON repository fallback | BigQuery via `BigQueryNetworkSearch` |
 | Async work distribution | Job enqueue plus worker route | Pub/Sub topic and worker service |
@@ -304,6 +306,8 @@ Important values:
 | --- | --- |
 | `USE_MOCK_DATA` | Keeps the demo deterministic without cloud credentials. |
 | `AI_PROVIDER` | Selects `mock`, `gemini_api`, `vertex_ai`, or `auto` on the backend. |
+| `ADK_ENABLED` | Enables Google ADK agent definition binding for the core fleet. |
+| `ADK_MODEL` | Optional ADK model override; defaults to `GEMINI_MODEL`. |
 | `GEMINI_API_KEY` | Enables backend-only Gemini API calls in `gemini_api` mode. |
 | `GEMINI_MODEL` | Defaults to `gemini-2.5-flash`, a broadly available Vertex AI Flash model. |
 | `GOOGLE_CLOUD_PROJECT` | Project used by Cloud Run, Pub/Sub, BigQuery, and Firestore. |

@@ -183,6 +183,16 @@ const titleCase = (value) =>
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const renderAdkRuntime = (runtime) => {
+  if (!runtime) {
+    return "";
+  }
+  const label = runtime.available ? "Google ADK" : "Local agent fallback";
+  const model = runtime.model ? ` · ${runtime.model}` : "";
+  const agent = runtime.agent_name ? ` · ${runtime.agent_name}` : "";
+  return `<p class="muted-line">Runtime: ${label}${model}${agent}</p>`;
+};
+
 const apiHeaders = () => {
   const headers = {
     "X-Tracelayer-User": localStorage.getItem("tracelayer.supervisorId") || "supervisor@example.com",
@@ -202,7 +212,7 @@ const setLiveStatus = (message) => {
   }
   status.dataset.liveStatus = message;
   if (status.textContent.includes("Backend:")) {
-    const [backend] = status.textContent.split(" · ");
+    const backend = status.dataset.backendStatus || status.textContent.split(" · ")[0];
     status.textContent = `${backend} · ${message}`;
   }
 };
@@ -277,6 +287,7 @@ const renderCase = (caseData) => {
         <div class="item">
           <strong>${titleCase(item.agent_id)}</strong>
           <p>${item.summary}</p>
+          ${renderAdkRuntime(item.data?.adk_runtime)}
         </div>
       `,
     )
@@ -398,7 +409,9 @@ const loadRuntimeConfig = async () => {
     }
     const config = await response.json();
     const live = status.dataset.liveStatus || "Live sync: ready";
-    status.textContent = `Backend: ${config.ai_provider} / ${config.gemini_model} · ${live}`;
+    const adk = config.adk_available ? "Google ADK" : "local agent runtime";
+    status.dataset.backendStatus = `Backend: ${config.ai_provider} / ${config.gemini_model} · ${adk}`;
+    status.textContent = `${status.dataset.backendStatus} · ${live}`;
   } catch (error) {
     status.textContent = "Backend: local fallback";
   }

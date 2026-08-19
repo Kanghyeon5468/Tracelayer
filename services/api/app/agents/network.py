@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.adk_runtime import AdkAgentRuntime
 from app.agents.base import BaseInvestigationAgent
 from app.connectors.bigquery_network import BigQueryNetworkSearch
 from app.domain.models import AgentIdentity, AgentOutput, InvestigationContext, NetworkLink
@@ -8,9 +9,15 @@ from app.domain.models import AgentIdentity, AgentOutput, InvestigationContext, 
 class NetworkAgent(BaseInvestigationAgent):
     required_permissions = ["transactions.read", "graph.search"]
 
-    def __init__(self, identity: AgentIdentity, network_search: BigQueryNetworkSearch) -> None:
+    def __init__(
+        self,
+        identity: AgentIdentity,
+        network_search: BigQueryNetworkSearch,
+        adk_runtime: AdkAgentRuntime | None = None,
+    ) -> None:
         self.identity = identity
         self.network_search = network_search
+        self.adk_runtime = adk_runtime
 
     def run(self, context: InvestigationContext) -> AgentOutput:
         trigger = context.trigger_transaction
@@ -54,7 +61,21 @@ class NetworkAgent(BaseInvestigationAgent):
                 "link_count": len(links),
                 "relationships": sorted({link.relationship for link in links}),
                 "search": context.network_search_metadata,
+                "adk_runtime": self._adk_binding(),
             },
         )
         context.agent_outputs.append(output)
         return output
+
+    def _adk_binding(self) -> dict:
+        if not self.adk_runtime:
+            return {"enabled": False, "available": False, "framework": "google_adk"}
+        return self.adk_runtime.bind_agent(
+            self.identity,
+            description="Discovers account, device, IP, email, and counterparty links.",
+            instruction=(
+                "You are TraceLayer's Network Agent. Use approved related-transaction "
+                "search tools to find connected accounts, devices, IP addresses, emails, "
+                "and counterparties without exposing unnecessary PII."
+            ),
+        ).as_dict()

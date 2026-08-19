@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.adk_runtime import AdkAgentRuntime
 from app.agents.base import BaseInvestigationAgent
 from app.connectors.reasoner import GeminiReasoner
 from app.domain.models import AgentIdentity, AgentOutput, InvestigationContext, RiskPolicy
@@ -16,11 +17,13 @@ class TriageAgent(BaseInvestigationAgent):
         reasoner: GeminiReasoner,
         federated_engine: VeritasFederatedRiskEngine | None = None,
         risk_policy: RiskPolicy | None = None,
+        adk_runtime: AdkAgentRuntime | None = None,
     ) -> None:
         self.identity = identity
         self.reasoner = reasoner
         self.federated_engine = federated_engine or VeritasFederatedRiskEngine()
         self.risk_policy = risk_policy or RiskPolicy()
+        self.adk_runtime = adk_runtime
 
     def run(self, context: InvestigationContext) -> AgentOutput:
         transaction = context.trigger_transaction
@@ -132,10 +135,24 @@ class TriageAgent(BaseInvestigationAgent):
                     "high_threshold": self.risk_policy.high_threshold,
                     "critical_threshold": self.risk_policy.critical_threshold,
                 },
+                "adk_runtime": self._adk_binding(),
             },
         )
         context.agent_outputs.append(output)
         return output
+
+    def _adk_binding(self) -> dict:
+        if not self.adk_runtime:
+            return {"enabled": False, "available": False, "framework": "google_adk"}
+        return self.adk_runtime.bind_agent(
+            self.identity,
+            description="Scores suspicious financial transactions and assigns risk priority.",
+            instruction=(
+                "You are TraceLayer's Triage Agent. Score transaction risk using "
+                "auditable factors, federated risk signals, and stored threshold policy. "
+                "Return concise investigation-ready reasoning."
+            ),
+        ).as_dict()
 
     @staticmethod
     def _model_safe_transaction_features(context: InvestigationContext) -> dict:

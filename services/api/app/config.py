@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     use_mock_data: bool = True
     ai_provider: str = "mock"
+    adk_enabled: bool = True
+    adk_model: str | None = None
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"
     google_cloud_project: str | None = None
@@ -50,6 +52,10 @@ class Settings(BaseSettings):
         if self.google_cloud_project:
             return "vertex_ai"
         return "mock"
+
+    @property
+    def resolved_adk_model(self) -> str:
+        return self.adk_model or self.gemini_model
 
 
 @lru_cache

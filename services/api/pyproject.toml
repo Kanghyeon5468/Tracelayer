@@ -9,6 +9,7 @@ description = "Fraud investigation agent fleet for the Fortified Enterprise Flee
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
+    "google-adk>=1.29.0",
     "uvicorn[standard]>=0.30.0",
     "pydantic>=2.7.0",
     "pydantic-settings>=2.3.0",

@@ -4,6 +4,7 @@ import random
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from app.adk_runtime import AdkAgentRuntime
 from app.agents import (
     AgentRegistry,
     CaseManagerAgent,
@@ -68,6 +69,7 @@ class FraudInvestigationFleet:
         policy_engine: PolicyEngine | None = None,
         guardrail: ModelArmorGuardrail | None = None,
         federated_engine: VeritasFederatedRiskEngine | None = None,
+        adk_runtime: AdkAgentRuntime | None = None,
     ) -> None:
         self.settings = settings
         self.registry = AgentRegistry()
@@ -83,6 +85,7 @@ class FraudInvestigationFleet:
         self.gateway = AgentGateway(self.policy_engine, self.guardrail, self.audit_ledger)
         self.reasoner = GeminiReasoner(settings, self.guardrail)
         self.federated_engine = federated_engine or VeritasFederatedRiskEngine()
+        self.adk_runtime = adk_runtime or AdkAgentRuntime(settings)
 
     def investigate(
         self,
@@ -128,19 +131,24 @@ class FraudInvestigationFleet:
                 self.reasoner,
                 self.federated_engine,
                 risk_policy,
+                self.adk_runtime,
             ),
             "network-agent": NetworkAgent(
                 self.registry.get("network-agent"),
                 network_search,
+                self.adk_runtime,
             ),
             "evidence-agent": EvidenceAgent(self.registry.get("evidence-agent"), policy_text),
             "compliance-agent": ComplianceAgent(self.registry.get("compliance-agent")),
-            "case-manager-agent": CaseManagerAgent(self.registry.get("case-manager-agent")),
+            "case-manager-agent": CaseManagerAgent(
+                self.registry.get("case-manager-agent"),
+                self.adk_runtime,
+            ),
         }
 
         self.gateway.run_agent(agent_by_id["triage-agent"], context, request)
         self.gateway.run_agent(
-            CaseManagerPlanningAgent(self.registry.get("case-manager-agent")),
+            CaseManagerPlanningAgent(self.registry.get("case-manager-agent"), self.adk_runtime),
             context,
             request,
         )

@@ -116,7 +116,8 @@ const publishCaseUpdate = (caseData, source) => {
 const loadRuntimeConfig = async () => {
   try {
     const config = await apiFetch("/runtime/config");
-    setText("#admin-runtime-status", `Backend: ${config.ai_provider} / ${config.gemini_model}`);
+    const adk = config.adk_available ? "Google ADK" : "local agent runtime";
+    setText("#admin-runtime-status", `Backend: ${config.ai_provider} / ${config.gemini_model} · ${adk}`);
   } catch (error) {
     setText("#admin-runtime-status", "Backend: unavailable");
   }

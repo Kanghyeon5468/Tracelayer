@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.adk_runtime import AdkAgentRuntime
 from app.agents.registry import AgentRegistry
 from app.config import get_settings
 from app.domain.models import (
@@ -70,12 +71,18 @@ def health() -> dict[str, str]:
 
 @app.get("/runtime/config")
 def runtime_config() -> dict[str, str | bool | None]:
+    adk = AdkAgentRuntime(settings).runtime_config()
     return {
         "app": settings.app_name,
         "env": settings.app_env,
         "security_mode": settings.security_mode,
         "ai_provider": settings.resolved_ai_provider,
         "gemini_model": settings.gemini_model,
+        "adk_enabled": adk["enabled"],
+        "adk_available": adk["available"],
+        "adk_framework": adk["framework"],
+        "adk_model": adk["model"],
+        "adk_error": adk["error"],
         "google_cloud_project": settings.google_cloud_project,
         "google_cloud_location": settings.google_cloud_location,
         "secrets_in_browser": False,
