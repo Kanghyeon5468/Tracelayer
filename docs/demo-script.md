@@ -8,33 +8,57 @@ Fraud investigators in banks, insurers, and fintech companies lose time moving b
 
 ## 0:30 - Product
 
-TraceLayer turns one suspicious transaction into an auditable investigation case. It coordinates a fleet of specialized agents instead of asking a human analyst to manually gather every clue.
+TraceLayer turns one suspicious transaction into an auditable investigation case. The Case Manager Agent creates a case-specific investigation plan, then runs only the agents needed for that risk level.
 
-## 1:00 - Live Demo
+## 1:00 - Dynamic Agent Demo
 
 1. Open the dashboard.
-2. Trigger the demo overseas transfer case.
-3. Show the risk score and priority from the Triage Agent.
-4. Show related accounts and devices from the Network Agent.
-5. Show the evidence timeline.
-6. Show compliance checks and PII redaction.
-7. Show the final human approval request.
+2. Click `Run Demo Case`.
+3. Show `Agent-generated Investigation Plan`.
+4. Explain that low-risk, medium-risk, high-risk, and missing-data cases follow different plans.
+5. For a high-risk or critical case, show Triage, Federated Intelligence, Network, Evidence, Compliance, and Human Approval.
 
-## 2:45 - Architecture
+## 1:45 - Investigation Depth
+
+1. Show the privacy-separated `Federated Intelligence` panel.
+2. Point out that contributing organizations are counted, but external customer records exposed remains zero.
+3. Show `Local Investigation Evidence` separately.
+4. Rotate and zoom the interactive 3D network graph.
+5. Show `Fraud Campaign Detection` and shared infrastructure links.
+
+## 2:30 - Human Feedback Loop
+
+1. Open the admin console.
+2. Show pending approvals and approval history.
+3. Click `Request More Evidence` on a pending case.
+4. Return to the dashboard and show that Evidence, Compliance, and Case Manager reran.
+5. Approve or deny the new request and show the live status update.
+
+## 3:05 - Security Demo
+
+1. Click `Run Attack Demo` on the dashboard.
+2. Show the malicious external memo scenario.
+3. Show Model Armor findings: prompt injection detected, external instruction blocked, PII access denied.
+4. Explain that the investigation continues using structured transaction fields instead of unsafe memo text.
+
+## 3:35 - Architecture
 
 Show the architecture diagram and explain:
 
 - Cloud Run hosts the Case API.
-- Pub/Sub distributes long-running investigation work.
-- Firestore or Cloud SQL stores case state.
-- BigQuery searches related transactions.
-- Gemini explains patterns and summarizes evidence.
-- Model Armor and the Compliance Agent guard sensitive data.
+- Google ADK agent definitions bind the core fleet.
+- The Case Manager Planner chooses the investigation path.
+- Pub/Sub push runs asynchronous investigations on Cloud Run.
+- Firestore stores cases, approvals, risk thresholds, and job state.
+- BigQuery searches related transactions when available.
+- Gemini explains risk through the backend-only Vertex AI boundary.
+- Model Armor, Agent Gateway, and Compliance Agent guard sensitive data.
+- Cloud Logging receives structured trace events for each agent run.
 
-## 3:30 - Why It Matters
+## 3:55 - Why It Matters
 
 TraceLayer reduces investigation latency, improves consistency, and keeps final enforcement decisions under human approval.
 
-## 3:50 - Closing
+## Closing
 
-This is a Fortified Enterprise Fleet because it demonstrates agent identity, persistent memory, model guardrails, policy-aware execution, audit traces, and production infrastructure boundaries.
+This is a Fortified Enterprise Fleet because it demonstrates agent identity, dynamic planning, persistent memory, model guardrails, policy-aware execution, asynchronous workers, human feedback, audit traces, and production infrastructure boundaries.

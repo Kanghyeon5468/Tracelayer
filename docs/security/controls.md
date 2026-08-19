@@ -58,7 +58,7 @@ Blocking findings stop the model call. Non-blocking findings are attached to the
 - Case persistence
 - Approval decisions
 
-Each event contains a previous hash and event hash. This creates a local tamper-evident chain that can later be backed by Cloud Logging, BigQuery, or Cloud Storage object retention.
+Each event contains a previous hash and event hash. Local runs keep a tamper-evident JSONL chain. Deployed runs also emit structured Cloud Logging trace entries with `case_id`, `agent_id`, `agent_version`, `tool`, `latency_ms`, and `status` fields for Cloud Run log correlation.
 
 ## Human-in-the-loop Enforcement
 

@@ -147,27 +147,79 @@ Each node produces a clipped and noised local update. TraceLayer securely aggreg
 
 ## Architecture
 
+TraceLayer is intentionally documented as several smaller flows instead of one oversized diagram. The key point is that the Case Manager creates and revises the investigation plan; the fleet does not blindly run every agent for every case.
+
+### System Boundary
+
 ```mermaid
 flowchart LR
-    Analyst[Fraud Analyst Dashboard] --> API[Case API on Cloud Run]
-    API --> Gateway[Agent Gateway and Policy Layer]
+    Dashboard[Fraud Analyst Dashboard] --> API[FastAPI Case API on Cloud Run]
+    Admin[Supervisor Admin Console] --> API
+    API --> Auth[API Key and Role Context]
+    Auth --> Gateway[Agent Gateway]
+    Gateway --> Policy[Policy Engine]
     Gateway --> Registry[Agent Registry]
-    Gateway --> Memory[Memory Bank]
-    Gateway --> Armor[Model Armor Guardrails]
-    Gateway --> PubSub[Pub/Sub Investigation Jobs]
-    Gateway --> Veritas[Embedded Veritas Federation]
-    PubSub --> Triage[Triage Agent]
-    PubSub --> Network[Network Agent]
-    PubSub --> Evidence[Evidence Agent]
-    PubSub --> Compliance[Compliance Agent]
-    PubSub --> CaseManager[Case Manager Agent]
-    Triage --> Gemini[Gemini via Vertex AI or Gemini API]
-    Triage --> Veritas
-    Network --> BigQuery[BigQuery Related Transactions]
-    Evidence --> Firestore[Firestore or Cloud SQL Case Data]
-    Compliance --> Policies[Policy Store]
-    CaseManager --> Approvals[Human Approval Queue]
-    CaseManager --> Reports[PDF or Dashboard Report]
+    Gateway --> Armor[Model Armor Guardrail]
+    Gateway --> Planner[Case Manager Planner]
+    Planner --> Fleet[Selected Agent Handlers]
+    Fleet --> Gemini[Gemini through Vertex AI]
+    Fleet --> Firestore[Firestore Case and Job State]
+    Fleet --> BigQuery[BigQuery Network Search]
+    Fleet --> PubSub[Pub/Sub Investigation Topic]
+    Fleet --> Logging[Cloud Logging Trace Events]
+    Fleet --> Veritas[Embedded Veritas Federated Risk]
+```
+
+### Dynamic Investigation Planning
+
+```mermaid
+flowchart TD
+    Start[Suspicious Transaction] --> InitialPlan[Case Manager creates initial triage-first plan]
+    InitialPlan --> Triage[Triage Agent scores local and federated risk]
+    Triage --> Replan[Case Manager replans from risk, missing data, and policy]
+    Replan --> Low{Low risk?}
+    Replan --> Medium{Medium risk?}
+    Replan --> High{High or critical?}
+    Replan --> Missing{Missing required data?}
+    Low --> LowPath[Triage -> Compliance -> Close]
+    Medium --> MediumPath[Triage -> Evidence -> Compliance -> Analyst Review]
+    High --> HighPath[Triage -> Federated Intelligence -> Network -> Evidence -> Compliance -> Human Approval]
+    Missing --> PausePath[Triage -> Request Additional Evidence -> Pause]
+```
+
+### Real Pub/Sub Worker Path
+
+```mermaid
+sequenceDiagram
+    participant UI as Dashboard
+    participant API as Cloud Run API
+    participant PS as Pub/Sub
+    participant Worker as /pubsub/investigations
+    participant Store as Firestore Job Store
+
+    UI->>API: POST /cases/demo/async
+    API->>Store: create job queued
+    API->>PS: publish job_id
+    API-->>UI: return job_id immediately
+    PS->>Worker: authenticated push delivery
+    Worker->>Store: mark running
+    Worker->>API: run investigation fleet
+    Worker->>Store: mark succeeded or failed
+    UI->>API: poll /jobs/{job_id}
+```
+
+### Human Feedback Loop
+
+```mermaid
+flowchart LR
+    Approval[Pending Approval] --> Decision{Supervisor decision}
+    Decision --> Approved[Approve hold recommendation]
+    Decision --> Denied[Deny action and keep audit trail]
+    Decision --> MoreEvidence[Request more evidence]
+    MoreEvidence --> Evidence[Evidence Agent reruns]
+    Evidence --> Compliance[Compliance Agent reruns]
+    Compliance --> Replan[Case Manager reevaluates]
+    Replan --> NewApproval[New approval request]
 ```
 
 More detail is available in [docs/architecture.md](docs/architecture.md).
@@ -179,7 +231,7 @@ More detail is available in [docs/architecture.md](docs/architecture.md).
 ├── apps/dashboard/          # Static demo dashboard
 ├── data/                    # Mock transactions, customers, and policy data
 ├── docs/                    # Architecture, demo script, and submission notes
-├── infra/                   # Cloud Run and Pub/Sub deployment stubs
+├── infra/                   # Cloud Run, Pub/Sub, BigQuery, Firestore, and IAM deployment assets
 └── services/api/            # FastAPI service and agent fleet implementation
 ```
 
@@ -242,7 +294,7 @@ curl http://localhost:8080/audit/verify \
   -H "X-Tracelayer-Role: compliance"
 ```
 
-Run the Pub/Sub-style async demo flow locally:
+Run the local async demo flow:
 
 ```bash
 JOB_ID=$(curl -s -X POST http://localhost:8080/cases/demo/async \
@@ -302,17 +354,19 @@ Expected demo path:
 
 ## Google Cloud Mapping
 
-| Capability | Local Skeleton | Google Cloud Target |
+| Capability | Local Development | Deployed Cloud Run Demo |
 | --- | --- | --- |
-| Runtime | FastAPI process | Cloud Run |
-| Agent framework boundary | `AdkAgentRuntime` plus agent classes under `services/api/app/agents` | Google ADK agent runtime with GenAI/Vertex model access |
-| Transaction store | JSON files in `data/` | Firestore, Cloud SQL, or BigQuery |
-| Related transaction search | JSON repository fallback | BigQuery via `BigQueryNetworkSearch` |
-| Async work distribution | Local job enqueue plus manual worker route | Pub/Sub push subscription invoking `/pubsub/investigations` on Cloud Run |
-| Memory bank | Local JSONL append-only snapshots | Firestore case and job collections |
+| Runtime | FastAPI process with static dashboard routes | Private Cloud Run service behind authenticated proxy |
+| Agent framework boundary | Agent classes plus optional `AdkAgentRuntime` metadata | Google ADK `Agent` definitions bound for Triage, Network, and Case Manager |
+| Planner | Dynamic Case Manager planning in-process | Same planner, persisted output visible in the dashboard |
+| Transaction store | JSON fixtures in `data/` | Firestore, Cloud SQL, or BigQuery-ready data boundary |
+| Related transaction search | Local repository fallback | `BigQueryNetworkSearch` in `auto` mode with parameterized queries and fallback metadata |
+| Async work distribution | Local bus can enqueue and run `/jobs/{job_id}/run` manually | Pub/Sub push subscription invokes `/pubsub/investigations` automatically |
+| Memory bank | Local append-only JSONL snapshots | Firestore case, approval, policy, and job collections |
 | Model calls | Mock, Gemini API, or Vertex AI | Gemini through Vertex AI with service account credentials |
-| Guardrails | Compliance checks and redaction utilities | Model Armor and Agent Gateway policies |
-| Audit evidence | Markdown report output | Cloud Logging, Trace, BigQuery audit tables, PDF export |
+| Guardrails | Model Armor-style prompt and PII guardrails | Same guardrails at the backend boundary before and after model calls |
+| Observability | Hash-chained audit ledger | Structured Cloud Logging trace events with case and agent fields |
+| Investigation UI | Static dashboard with fallback demo case | Live case sync, 3D graph, campaign detection, approval updates, and admin console |
 
 ## API Surface
 
@@ -321,7 +375,7 @@ Expected demo path:
 | `GET /runtime/config` | Returns safe runtime metadata without secrets. |
 | `GET /agents` | Lists registered agent identities, permissions, and data access classes. |
 | `POST /cases/demo` | Runs a randomized synchronous demo investigation. |
-| `POST /cases/demo/async` | Enqueues a Pub/Sub-style investigation job. |
+| `POST /cases/demo/async` | Enqueues an async investigation job; uses Pub/Sub in deployed `PUBSUB_BACKEND=google` mode. |
 | `POST /pubsub/investigations` | Receives authenticated Pub/Sub push messages and runs queued investigation jobs. |
 | `POST /jobs/{job_id}/run` | Runs the worker step for a queued investigation job. |
 | `GET /jobs/{job_id}` | Reads async job status and generated case ID. |
@@ -392,7 +446,7 @@ The hackathon submission should include:
 
 1. Hosted project URL or recorded local demo.
 2. Code repository URL.
-3. Architecture diagram from `docs/architecture.mmd`.
+3. Architecture diagrams from `README.md`, `docs/architecture.md`, and `docs/architecture.mmd`.
 4. Four-minute demo video showing Cloud Run or Google Cloud evidence.
 5. Short write-up covering problem, value proposition, features, technologies, and learnings.
 
@@ -427,6 +481,6 @@ GEMINI_MODEL=gemini-2.5-flash
 
 The dashboard never receives these secrets. It only calls `/cases/demo`, `/cases/investigate`, and `/runtime/config` on the backend.
 
-For the Pub/Sub-style flow, the dashboard can call `/cases/demo/async`, invoke the worker route `/jobs/{job_id}/run`, then poll `/jobs/{job_id}` until the job returns a `case_id`. In Cloud Run, job state is persisted through Firestore when `MEMORY_BACKEND=firestore`.
+For the local async fallback, the dashboard can call `/cases/demo/async`, invoke `/jobs/{job_id}/run`, and poll `/jobs/{job_id}` until the job returns a `case_id`. In the deployed Cloud Run path, `/cases/demo/async` publishes to Pub/Sub and the authenticated push subscription calls `/pubsub/investigations` automatically; job state is persisted through Firestore when `MEMORY_BACKEND=firestore`.
 
 The admin console calls `/approvals/pending`, `/cases/{case_id}`, and `/cases/{case_id}/approval` with supervisor headers. In deployed enforcing mode, enter the demo API key in the admin console or send it through a trusted internal gateway.

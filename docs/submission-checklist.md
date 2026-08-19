@@ -5,7 +5,7 @@
 - Project description with problem, value proposition, features, and technologies.
 - Public or private code repository.
 - Spin-up instructions in `README.md`.
-- Architecture diagram from `docs/architecture.mmd`.
+- Architecture diagrams from `README.md`, `docs/architecture.md`, and `docs/architecture.mmd`.
 - Demo video around four minutes.
 - Proof that the backend was built or deployed on Google Cloud.
 
@@ -14,7 +14,8 @@
 - Cloud Run service page or `.run.app` URL.
 - Vertex AI or Gemini API logs.
 - Pub/Sub topic page.
-- Firestore, Cloud SQL, or BigQuery dataset page.
+- Firestore case/job collections and BigQuery dataset page.
+- Cloud Logging query filtered by `case_id` and `agent_id`.
 - Dashboard or API response showing a complete investigation case.
 
 ## Bonus Options
