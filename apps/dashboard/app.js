@@ -209,6 +209,127 @@ const renderModelArmorDemo = (demo) => {
   `;
 };
 
+const getNetworkOutput = (caseData) =>
+  caseData.agent_outputs?.find((output) => output.agent_id === "network-agent");
+
+const graphNodeClass = (type) => {
+  if (type === "trigger_transaction") {
+    return "trigger";
+  }
+  if (type === "related_transaction") {
+    return "related";
+  }
+  return "entity";
+};
+
+const renderNetworkGraph = (graph) => {
+  if (!graph?.nodes?.length) {
+    return `
+      <div class="item">
+        <strong>No graph generated</strong>
+        <p>This investigation plan did not run network discovery.</p>
+      </div>
+    `;
+  }
+
+  const width = 920;
+  const height = 360;
+  const center = { x: 460, y: 180 };
+  const nodes = graph.nodes.slice(0, 18);
+  const positioned = new Map();
+  const trigger = nodes.find((node) => node.type === "trigger_transaction") || nodes[0];
+  positioned.set(trigger.id, { ...trigger, x: center.x, y: center.y });
+
+  const ringNodes = nodes.filter((node) => node.id !== trigger.id);
+  ringNodes.forEach((node, index) => {
+    const angle = (Math.PI * 2 * index) / Math.max(ringNodes.length, 1) - Math.PI / 2;
+    const radius = node.type === "related_transaction" ? 132 : 98;
+    positioned.set(node.id, {
+      ...node,
+      x: Math.round(center.x + Math.cos(angle) * radius),
+      y: Math.round(center.y + Math.sin(angle) * radius),
+    });
+  });
+
+  const edgeMarkup = (graph.edges || [])
+    .filter((edge) => positioned.has(edge.source) && positioned.has(edge.target))
+    .slice(0, 36)
+    .map((edge) => {
+      const source = positioned.get(edge.source);
+      const target = positioned.get(edge.target);
+      return `
+        <line
+          class="graph-edge"
+          x1="${source.x}"
+          y1="${source.y}"
+          x2="${target.x}"
+          y2="${target.y}"
+        />
+      `;
+    })
+    .join("");
+
+  const nodeMarkup = [...positioned.values()]
+    .map(
+      (node) => `
+        <g class="graph-node ${graphNodeClass(node.type)}" transform="translate(${node.x}, ${node.y})">
+          <circle r="${node.type === "trigger_transaction" ? 24 : 18}"></circle>
+          <text y="${node.type === "trigger_transaction" ? 42 : 34}">${node.label}</text>
+        </g>
+      `,
+    )
+    .join("");
+
+  return `
+    <svg class="network-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Live fraud network graph">
+      ${edgeMarkup}
+      ${nodeMarkup}
+    </svg>
+    <div class="graph-legend">
+      <span><i class="legend-dot trigger"></i>Trigger</span>
+      <span><i class="legend-dot related"></i>Related Transaction</span>
+      <span><i class="legend-dot entity"></i>Shared Entity</span>
+      <span>${nodes.length} nodes · ${(graph.edges || []).length} edges · ${titleCase(graph.layout)}</span>
+    </div>
+  `;
+};
+
+const renderCampaignDetection = (campaign) => {
+  if (!campaign) {
+    return `
+      <div class="item">
+        <strong>No campaign analysis</strong>
+        <p>This investigation plan did not run the Network Agent.</p>
+      </div>
+    `;
+  }
+  const detected = campaign.detected;
+  const relationshipRows = Object.entries(campaign.relationship_counts || {})
+    .map(([relationship, count]) => `<span class="chip">${titleCase(relationship)} ${count}</span>`)
+    .join("");
+
+  return `
+    <div class="campaign-card ${detected ? "detected" : ""}">
+      <div>
+        <span class="campaign-status">${detected ? "Campaign Detected" : "No Campaign Detected"}</span>
+        <strong>${titleCase(campaign.pattern)}</strong>
+        <p>${campaign.recommended_action}</p>
+      </div>
+      <div class="campaign-metrics">
+        <div><span>Severity</span><strong>${titleCase(campaign.severity)}</strong></div>
+        <div><span>Confidence</span><strong>${Math.round((campaign.confidence || 0) * 100)}%</strong></div>
+        <div><span>Linked Transactions</span><strong>${campaign.linked_transaction_count}</strong></div>
+        <div><span>Network Links</span><strong>${campaign.network_link_count}</strong></div>
+      </div>
+      <div class="chip-row">
+        <span class="chip">${campaign.campaign_id}</span>
+        <span class="chip">${campaign.campaign_signature}</span>
+        ${relationshipRows}
+      </div>
+    </div>
+  `;
+};
+
 const apiHeaders = () => {
   const headers = {
     "X-Tracelayer-User": localStorage.getItem("tracelayer.supervisorId") || "supervisor@example.com",
@@ -341,6 +462,14 @@ const renderCase = (caseData) => {
       `,
     )
     .join("") || '<div class="item"><strong>No links searched</strong><p>This plan did not run network discovery.</p></div>';
+
+  const networkOutput = getNetworkOutput(caseData);
+  document.querySelector("#network-graph").innerHTML = renderNetworkGraph(
+    networkOutput?.data?.network_graph,
+  );
+  document.querySelector("#campaign-detection").innerHTML = renderCampaignDetection(
+    networkOutput?.data?.campaign_detection,
+  );
 
   const signal = caseData.federated_risk_signal;
   const linkCount = caseData.network_links?.length || 0;

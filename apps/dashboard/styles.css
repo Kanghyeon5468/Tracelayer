@@ -348,6 +348,157 @@ label {
   color: var(--risk);
 }
 
+.network-graph {
+  min-height: 280px;
+}
+
+.network-svg {
+  width: 100%;
+  min-height: 300px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(215, 222, 232, 0.28) 1px, transparent 1px),
+    linear-gradient(rgba(215, 222, 232, 0.28) 1px, transparent 1px),
+    #fbfdff;
+  background-size: 44px 44px;
+}
+
+.graph-edge {
+  stroke: #9aa8ba;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  opacity: 0.72;
+}
+
+.graph-node circle {
+  stroke: white;
+  stroke-width: 3;
+}
+
+.graph-node.trigger circle {
+  fill: var(--risk);
+}
+
+.graph-node.related circle {
+  fill: var(--accent);
+}
+
+.graph-node.entity circle {
+  fill: #3b5b7a;
+}
+
+.graph-node text {
+  fill: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.graph-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.legend-dot.trigger {
+  background: var(--risk);
+}
+
+.legend-dot.related {
+  background: var(--accent);
+}
+
+.legend-dot.entity {
+  background: #3b5b7a;
+}
+
+.campaign-detection {
+  display: grid;
+  gap: 12px;
+}
+
+.campaign-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: #fbfdff;
+}
+
+.campaign-card.detected {
+  border-color: rgba(180, 35, 24, 0.34);
+  background: #fff7f5;
+}
+
+.campaign-card strong {
+  display: block;
+  margin: 5px 0;
+  font-size: 1.08rem;
+}
+
+.campaign-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.campaign-status {
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.campaign-card.detected .campaign-status {
+  color: var(--risk);
+}
+
+.campaign-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.campaign-metrics div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+  background: white;
+}
+
+.campaign-metrics span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.campaign-metrics strong {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .registry-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -662,7 +813,8 @@ label {
   }
 
   .metric-grid,
-  .privacy-list {
+  .privacy-list,
+  .campaign-metrics {
     grid-template-columns: 1fr;
   }
 

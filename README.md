@@ -15,7 +15,7 @@ The current deployed demo runs on Cloud Run with authenticated access, backend-o
 | Area | Current Status |
 | --- | --- |
 | Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
-| Demo Dashboard | `/dashboard` shows case summary, agent-generated investigation plan, agent findings, privacy-separated Veritas signal, network links, compliance, approval state, async job state, and Agent Registry. |
+| Demo Dashboard | `/dashboard` shows case summary, agent-generated investigation plan, agent findings, live network graph, fraud campaign detection, privacy-separated Veritas signal, network links, compliance, approval state, async job state, and Agent Registry. |
 | Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept, deny, request more evidence, and tune stored risk thresholds. |
 | Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions with low, medium, high, critical, and missing-data paths while avoiding recent repeats. |
 | Async Demo Flow | `Run Async Demo` enqueues an investigation job; Cloud Run receives the real Pub/Sub push at `/pubsub/investigations` and stores job completion in Firestore. |
@@ -42,6 +42,8 @@ TraceLayer now includes concrete enterprise controls in the runnable backend:
 | Human Approval | Medium-risk cases create manual review requests; high-risk actions require supervisor approval before any hold. Reviewers can request more evidence, which reruns Evidence, Compliance, and Case Manager agents. |
 | Embedded Veritas Federation | `VeritasFederatedRiskEngine` produces cross-institution risk signals without raw record movement. |
 | BigQuery Network Boundary | `BigQueryNetworkSearch` uses parameterized BigQuery queries when available and records fallback metadata. |
+| Live Network Graph | `NetworkAgent` emits graph nodes and edges for trigger transactions, related transactions, and shared entities; the dashboard redraws the graph whenever a live case update arrives. |
+| Fraud Campaign Detection | `NetworkAgent` combines shared-infrastructure links with the federated campaign signature to flag clustered fraud campaigns and recommend escalation. |
 | Pub/Sub Worker | `GooglePubSubBus` publishes queued work to Pub/Sub; authenticated push delivery invokes `/pubsub/investigations` on Cloud Run. |
 | Async Job State | `InvestigationJob` stores queued/running/succeeded/failed state in local JSONL or Firestore. |
 | Agent Registry UI | Dashboard renders service accounts, permissions, versions, and data access classes from `/agents`. |
@@ -58,8 +60,9 @@ TraceLayer will:
 2. Ask the Case Manager Agent to create an initial investigation plan.
 3. Run Triage, then let the Case Manager replan from the actual risk, federated signal, and missing-data state.
 4. Execute only the planned action handlers for the case priority.
-5. Check for PII exposure, policy violations, and unsafe automation.
-6. Generate a case summary, route medium-risk cases to analyst review, and request supervisor approval for high-risk actions.
+5. Render a live local network graph and detect whether the links form a fraud campaign.
+6. Check for PII exposure, policy violations, and unsafe automation.
+7. Generate a case summary, route medium-risk cases to analyst review, and request supervisor approval for high-risk actions.
 
 The planner changes the workflow by risk:
 
@@ -119,7 +122,7 @@ jsonPayload.status="succeeded"
 | Agent | Responsibility |
 | --- | --- |
 | Triage Agent | Scores suspicious activity and decides investigation priority. |
-| Network Agent | Runs related-transaction search only when selected by the investigation plan. |
+| Network Agent | Runs related-transaction search only when selected by the plan, builds a live graph of shared entities, and detects fraud-campaign clusters when local network evidence corroborates federated signatures. |
 | Evidence Agent | Builds the evidence timeline from transaction records and internal policy. |
 | Compliance Agent | Checks PII exposure, access boundaries, policy conflicts, and tool safety. |
 | Case Manager Agent | Builds the initial and post-triage investigation plans, maintains case state, routes medium-risk cases to analyst review, pauses missing-data cases, and requests supervisor approval for high-risk actions. |

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from app.domain.models import (
     ActorRole,
     AgentOutput,
@@ -59,16 +61,23 @@ def redact_case_for_role(case: InvestigationCase, role: ActorRole) -> Investigat
 
 
 def _redact_mapping(value: dict) -> dict:
-    redacted = {}
     guardrail = ModelArmorGuardrail()
-    for key, item in value.items():
-        if isinstance(item, str):
-            redacted[key] = guardrail.redact_sensitive_text(item)
-        elif key in {"risk_flags", "policy_excerpt_names", "finding_ids"}:
-            redacted[key] = item
-        else:
-            redacted[key] = item
-    return redacted
+    return {key: _redact_value(key, item, guardrail) for key, item in value.items()}
+
+
+def _redact_value(key: str, value: Any, guardrail: ModelArmorGuardrail) -> Any:
+    if key in {"risk_flags", "policy_excerpt_names", "finding_ids"}:
+        return value
+    if isinstance(value, str):
+        return guardrail.redact_sensitive_text(value)
+    if isinstance(value, list):
+        return [_redact_value(key, item, guardrail) for item in value]
+    if isinstance(value, dict):
+        return {
+            nested_key: _redact_value(nested_key, nested_value, guardrail)
+            for nested_key, nested_value in value.items()
+        }
+    return value
 
 
 def _redact_approval(

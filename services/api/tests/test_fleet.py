@@ -283,6 +283,30 @@ def test_network_agent_records_search_backend_metadata(tmp_path: Path) -> None:
     assert network_output.data["search"]["result_count"] >= 1
 
 
+def test_network_agent_builds_graph_and_campaign_detection(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    case = fleet.investigate("tx-9001")
+    network_output = next(
+        output for output in case.agent_outputs if output.agent_id == "network-agent"
+    )
+    graph = network_output.data["network_graph"]
+    campaign = network_output.data["campaign_detection"]
+
+    assert graph["layout"] == "radial_shared_infrastructure"
+    assert {node["type"] for node in graph["nodes"]} >= {
+        "trigger_transaction",
+        "related_transaction",
+        "device",
+    }
+    assert len(graph["edges"]) >= len(case.network_links)
+    assert campaign["detected"] is True
+    assert campaign["status"] == "campaign_detected"
+    assert campaign["campaign_signature"] == case.federated_risk_signal.campaign_signature
+    assert campaign["linked_transaction_count"] >= 2
+    assert campaign["shared_infrastructure_count"] >= 2
+
+
 def test_core_agents_record_google_adk_runtime_metadata(tmp_path: Path) -> None:
     fleet = _test_fleet(tmp_path)
 

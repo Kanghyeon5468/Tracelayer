@@ -85,6 +85,29 @@ class ReportWriter:
         else:
             lines.extend(["- No federated risk signal was attached.", ""])
 
+        network_output = next(
+            (output for output in case.agent_outputs if output.agent_id == "network-agent"),
+            None,
+        )
+        campaign = (network_output.data.get("campaign_detection") if network_output else None) or {}
+        lines.append("## Fraud Campaign Detection")
+        if campaign:
+            lines.extend(
+                [
+                    f"- Status: {campaign.get('status')}",
+                    f"- Campaign ID: {campaign.get('campaign_id')}",
+                    f"- Severity: {campaign.get('severity')}",
+                    f"- Confidence: {campaign.get('confidence')}",
+                    f"- Pattern: {campaign.get('pattern')}",
+                    f"- Linked Transactions: {campaign.get('linked_transaction_count')}",
+                    f"- Network Links: {campaign.get('network_link_count')}",
+                    f"- Recommended Action: {campaign.get('recommended_action')}",
+                    "",
+                ]
+            )
+        else:
+            lines.extend(["- No campaign analysis was produced for this plan.", ""])
+
         lines.append("## Evidence Timeline")
         for event in case.evidence_timeline:
             lines.append(
