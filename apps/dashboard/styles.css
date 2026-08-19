@@ -349,50 +349,76 @@ label {
 }
 
 .network-graph {
-  min-height: 280px;
+  min-height: 420px;
 }
 
-.network-svg {
+.network-graph-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.28fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.network-graph-viewport {
+  position: relative;
   width: 100%;
-  min-height: 300px;
-  border: 1px solid var(--line);
+  min-height: 390px;
+  overflow: hidden;
   border-radius: 8px;
   background:
     linear-gradient(90deg, rgba(215, 222, 232, 0.28) 1px, transparent 1px),
     linear-gradient(rgba(215, 222, 232, 0.28) 1px, transparent 1px),
     #fbfdff;
   background-size: 44px 44px;
+  cursor: grab;
+  touch-action: none;
 }
 
-.graph-edge {
-  stroke: #9aa8ba;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  opacity: 0.72;
+.network-graph-viewport:active {
+  cursor: grabbing;
 }
 
-.graph-node circle {
-  stroke: white;
-  stroke-width: 3;
+.network-graph-viewport canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-.graph-node.trigger circle {
-  fill: var(--risk);
-}
-
-.graph-node.related circle {
-  fill: var(--accent);
-}
-
-.graph-node.entity circle {
-  fill: #3b5b7a;
-}
-
-.graph-node text {
-  fill: var(--ink);
-  font-size: 0.76rem;
+.network-graph-viewport.loading::after {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  content: "Loading 3D graph";
   font-weight: 800;
-  text-anchor: middle;
+}
+
+.graph-selection {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  border-left: 3px solid var(--accent);
+  padding: 4px 0 4px 12px;
+}
+
+.graph-selection span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.graph-selection strong {
+  overflow-wrap: anywhere;
+  font-size: 1.02rem;
+}
+
+.graph-selection p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .graph-legend {
@@ -404,6 +430,11 @@ label {
   color: var(--muted);
   font-size: 0.84rem;
   font-weight: 800;
+}
+
+.graph-reset {
+  min-height: 32px;
+  padding: 0 10px;
 }
 
 .graph-legend span {
@@ -814,8 +845,13 @@ label {
 
   .metric-grid,
   .privacy-list,
-  .campaign-metrics {
+  .campaign-metrics,
+  .network-graph-stage {
     grid-template-columns: 1fr;
+  }
+
+  .network-graph-viewport {
+    min-height: 330px;
   }
 
   .registry-grid {

@@ -178,6 +178,9 @@ const API_BASE_URL =
 let currentCaseId = localStorage.getItem("tracelayer.currentCaseId") || fallbackCase.case_id;
 let runtimeConfig = { pubsub_backend: "local" };
 const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("tracelayer-live") : null;
+let threeModulePromise = null;
+let networkGraph3dState = null;
+let networkGraphRenderToken = 0;
 
 const titleCase = (value) =>
   String(value)
@@ -212,7 +215,7 @@ const renderModelArmorDemo = (demo) => {
 const getNetworkOutput = (caseData) =>
   caseData.agent_outputs?.find((output) => output.agent_id === "network-agent");
 
-const graphNodeClass = (type) => {
+const nodeTone = (type) => {
   if (type === "trigger_transaction") {
     return "trigger";
   }
@@ -220,6 +223,13 @@ const graphNodeClass = (type) => {
     return "related";
   }
   return "entity";
+};
+
+const loadThree = () => {
+  if (!threeModulePromise) {
+    threeModulePromise = import("./vendor/three.module.min.js");
+  }
+  return threeModulePromise;
 };
 
 const renderNetworkGraph = (graph) => {
@@ -232,65 +242,354 @@ const renderNetworkGraph = (graph) => {
     `;
   }
 
-  const width = 920;
-  const height = 360;
-  const center = { x: 460, y: 180 };
   const nodes = graph.nodes.slice(0, 18);
-  const positioned = new Map();
-  const trigger = nodes.find((node) => node.type === "trigger_transaction") || nodes[0];
-  positioned.set(trigger.id, { ...trigger, x: center.x, y: center.y });
-
-  const ringNodes = nodes.filter((node) => node.id !== trigger.id);
-  ringNodes.forEach((node, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(ringNodes.length, 1) - Math.PI / 2;
-    const radius = node.type === "related_transaction" ? 132 : 98;
-    positioned.set(node.id, {
-      ...node,
-      x: Math.round(center.x + Math.cos(angle) * radius),
-      y: Math.round(center.y + Math.sin(angle) * radius),
-    });
-  });
-
-  const edgeMarkup = (graph.edges || [])
-    .filter((edge) => positioned.has(edge.source) && positioned.has(edge.target))
-    .slice(0, 36)
-    .map((edge) => {
-      const source = positioned.get(edge.source);
-      const target = positioned.get(edge.target);
-      return `
-        <line
-          class="graph-edge"
-          x1="${source.x}"
-          y1="${source.y}"
-          x2="${target.x}"
-          y2="${target.y}"
-        />
-      `;
-    })
-    .join("");
-
-  const nodeMarkup = [...positioned.values()]
-    .map(
-      (node) => `
-        <g class="graph-node ${graphNodeClass(node.type)}" transform="translate(${node.x}, ${node.y})">
-          <circle r="${node.type === "trigger_transaction" ? 24 : 18}"></circle>
-          <text y="${node.type === "trigger_transaction" ? 42 : 34}">${node.label}</text>
-        </g>
-      `,
-    )
-    .join("");
-
   return `
-    <svg class="network-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Live fraud network graph">
-      ${edgeMarkup}
-      ${nodeMarkup}
-    </svg>
+    <div class="network-graph-stage">
+      <div class="network-graph-viewport" aria-label="Interactive 3D fraud network graph"></div>
+      <aside class="graph-selection">
+        <span>Selected Node</span>
+        <strong>Network Overview</strong>
+        <p>${nodes.length} nodes · ${(graph.edges || []).length} edges · ${titleCase(graph.layout)}</p>
+      </aside>
+    </div>
     <div class="graph-legend">
       <span><i class="legend-dot trigger"></i>Trigger</span>
       <span><i class="legend-dot related"></i>Related Transaction</span>
       <span><i class="legend-dot entity"></i>Shared Entity</span>
-      <span>${nodes.length} nodes · ${(graph.edges || []).length} edges · ${titleCase(graph.layout)}</span>
+      <button id="reset-graph-view" class="secondary-action graph-reset" type="button">Reset View</button>
     </div>
+  `;
+};
+
+const disposeNetworkGraph3d = () => {
+  if (!networkGraph3dState) {
+    return;
+  }
+  cancelAnimationFrame(networkGraph3dState.animationFrame);
+  networkGraph3dState.cleanup.forEach((cleanup) => cleanup());
+  networkGraph3dState.scene.traverse((object) => {
+    object.geometry?.dispose?.();
+    if (Array.isArray(object.material)) {
+      object.material.forEach((material) => material.dispose?.());
+    } else {
+      object.material?.dispose?.();
+    }
+    object.material?.map?.dispose?.();
+  });
+  networkGraph3dState.renderer.dispose();
+  networkGraph3dState = null;
+};
+
+const mountNetworkGraph3d = (graph) => {
+  disposeNetworkGraph3d();
+  const renderToken = (networkGraphRenderToken += 1);
+  if (!graph?.nodes?.length) {
+    return;
+  }
+
+  const viewport = document.querySelector(".network-graph-viewport");
+  const selection = document.querySelector(".graph-selection");
+  if (!viewport || !selection) {
+    return;
+  }
+
+  viewport.classList.add("loading");
+  loadThree()
+    .then((THREE) => {
+      if (!document.body.contains(viewport) || renderToken !== networkGraphRenderToken) {
+        return;
+      }
+      viewport.classList.remove("loading");
+      networkGraph3dState = createNetworkGraph3d(THREE, graph, viewport, selection);
+    })
+    .catch(() => {
+      if (renderToken !== networkGraphRenderToken) {
+        return;
+      }
+      viewport.classList.remove("loading");
+      viewport.innerHTML = `
+        <div class="item error-state">
+          <strong>3D graph unavailable</strong>
+          <p>The graph data is available, but the Three.js runtime could not be loaded.</p>
+        </div>
+      `;
+    });
+};
+
+const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf8fbfe);
+
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(0, 0.4, 8.2);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  viewport.replaceChildren(renderer.domElement);
+
+  const graphGroup = new THREE.Group();
+  graphGroup.rotation.x = -0.24;
+  graphGroup.rotation.y = 0.48;
+  scene.add(graphGroup);
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.45);
+  scene.add(ambientLight);
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  keyLight.position.set(4, 5, 6);
+  scene.add(keyLight);
+  const fillLight = new THREE.PointLight(0x0f766e, 1.1, 16);
+  fillLight.position.set(-4, -2, 4);
+  scene.add(fillLight);
+
+  const nodeMeshes = [];
+  const positionedNodes = positionGraphNodes3d(THREE, graph.nodes.slice(0, 18));
+  const nodeById = new Map(positionedNodes.map((node) => [node.id, node]));
+  const edgeMaterial = new THREE.MeshStandardMaterial({
+    color: 0x8fa1b5,
+    roughness: 0.62,
+    metalness: 0.08,
+    transparent: true,
+    opacity: 0.72,
+  });
+
+  (graph.edges || [])
+    .filter((edge) => nodeById.has(edge.source) && nodeById.has(edge.target))
+    .slice(0, 44)
+    .forEach((edge) => {
+      graphGroup.add(
+        createEdgeMesh(
+          THREE,
+          nodeById.get(edge.source).position,
+          nodeById.get(edge.target).position,
+          edgeMaterial,
+        ),
+      );
+    });
+
+  positionedNodes.forEach((node) => {
+    const tone = nodeTone(node.type);
+    const geometry = new THREE.SphereGeometry(node.type === "trigger_transaction" ? 0.28 : 0.2, 32, 18);
+    const material = new THREE.MeshStandardMaterial({
+      color: tone === "trigger" ? 0xb42318 : tone === "related" ? 0x0f766e : 0x3b5b7a,
+      roughness: 0.42,
+      metalness: 0.12,
+      emissive: tone === "trigger" ? 0x260402 : 0x000000,
+      emissiveIntensity: tone === "trigger" ? 0.2 : 0,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(node.position);
+    mesh.userData = { node };
+    nodeMeshes.push(mesh);
+    graphGroup.add(mesh);
+
+    const label = createLabelSprite(THREE, node.label);
+    label.position.copy(node.position).add(new THREE.Vector3(0, -0.42, 0));
+    graphGroup.add(label);
+  });
+
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  const controls = {
+    dragging: false,
+    moved: false,
+    lastX: 0,
+    lastY: 0,
+    targetRotationX: graphGroup.rotation.x,
+    targetRotationY: graphGroup.rotation.y,
+  };
+  const cleanup = [];
+
+  const resize = () => {
+    const rect = viewport.getBoundingClientRect();
+    const width = Math.max(Math.floor(rect.width), 320);
+    const height = Math.max(Math.floor(rect.height), 300);
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  };
+
+  const onPointerDown = (event) => {
+    controls.dragging = true;
+    controls.moved = false;
+    controls.lastX = event.clientX;
+    controls.lastY = event.clientY;
+    viewport.setPointerCapture?.(event.pointerId);
+  };
+  const onPointerMove = (event) => {
+    if (!controls.dragging) {
+      return;
+    }
+    const dx = event.clientX - controls.lastX;
+    const dy = event.clientY - controls.lastY;
+    controls.moved = controls.moved || Math.abs(dx) + Math.abs(dy) > 4;
+    controls.targetRotationY += dx * 0.008;
+    controls.targetRotationX = Math.max(-1.15, Math.min(1.15, controls.targetRotationX + dy * 0.006));
+    controls.lastX = event.clientX;
+    controls.lastY = event.clientY;
+  };
+  const onPointerUp = (event) => {
+    controls.dragging = false;
+    viewport.releasePointerCapture?.(event.pointerId);
+    if (!controls.moved) {
+      selectGraphNode(THREE, event, viewport, camera, graphGroup, raycaster, pointer, nodeMeshes, selection);
+    }
+  };
+  const onWheel = (event) => {
+    event.preventDefault();
+    camera.position.z = Math.max(4.4, Math.min(11, camera.position.z + event.deltaY * 0.006));
+  };
+  const onReset = () => {
+    controls.targetRotationX = -0.24;
+    controls.targetRotationY = 0.48;
+    camera.position.set(0, 0.4, 8.2);
+    updateGraphSelection(selection, null, graph);
+  };
+  const resetButton = document.querySelector("#reset-graph-view");
+
+  viewport.addEventListener("pointerdown", onPointerDown);
+  viewport.addEventListener("pointermove", onPointerMove);
+  viewport.addEventListener("pointerup", onPointerUp);
+  viewport.addEventListener("wheel", onWheel, { passive: false });
+  window.addEventListener("resize", resize);
+  resetButton?.addEventListener("click", onReset);
+  cleanup.push(
+    () => viewport.removeEventListener("pointerdown", onPointerDown),
+    () => viewport.removeEventListener("pointermove", onPointerMove),
+    () => viewport.removeEventListener("pointerup", onPointerUp),
+    () => viewport.removeEventListener("wheel", onWheel),
+    () => window.removeEventListener("resize", resize),
+    () => resetButton?.removeEventListener("click", onReset),
+  );
+
+  updateGraphSelection(selection, null, graph);
+  resize();
+
+  const animate = () => {
+    graphGroup.rotation.x += (controls.targetRotationX - graphGroup.rotation.x) * 0.12;
+    graphGroup.rotation.y += (controls.targetRotationY - graphGroup.rotation.y) * 0.12;
+    if (!controls.dragging) {
+      controls.targetRotationY += 0.0014;
+    }
+    renderer.render(scene, camera);
+    networkGraph3dState.animationFrame = requestAnimationFrame(animate);
+  };
+
+  const state = {
+    animationFrame: requestAnimationFrame(animate),
+    cleanup,
+    renderer,
+    scene,
+  };
+  networkGraph3dState = state;
+  return state;
+};
+
+const positionGraphNodes3d = (THREE, nodes) => {
+  const trigger = nodes.find((node) => node.type === "trigger_transaction") || nodes[0];
+  const others = nodes.filter((node) => node.id !== trigger.id);
+  const positioned = [
+    {
+      ...trigger,
+      position: new THREE.Vector3(0, 0, 0),
+    },
+  ];
+
+  others.forEach((node, index) => {
+    const angle = (Math.PI * 2 * index) / Math.max(others.length, 1);
+    const isTransaction = node.type === "related_transaction";
+    const radius = isTransaction ? 2.45 : 1.65;
+    const z = isTransaction ? Math.sin(angle * 1.7) * 0.9 : Math.cos(angle * 1.4) * 0.55;
+    positioned.push({
+      ...node,
+      position: new THREE.Vector3(
+        Math.cos(angle) * radius,
+        Math.sin(angle) * radius * 0.72,
+        z,
+      ),
+    });
+  });
+  return positioned;
+};
+
+const createEdgeMesh = (THREE, source, target, material) => {
+  const direction = new THREE.Vector3().subVectors(target, source);
+  const length = Math.max(direction.length(), 0.001);
+  const geometry = new THREE.CylinderGeometry(0.014, 0.014, length, 10);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.copy(source).add(target).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+  return mesh;
+};
+
+const createLabelSprite = (THREE, label) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 64;
+  const context = canvas.getContext("2d");
+  context.fillStyle = "rgba(255, 255, 255, 0.88)";
+  context.strokeStyle = "rgba(215, 222, 232, 0.96)";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.roundRect(4, 8, 248, 44, 10);
+  context.fill();
+  context.stroke();
+  context.fillStyle = "#17202a";
+  context.font = "700 24px Inter, system-ui, sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(String(label).slice(0, 22), 128, 31);
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(1.15, 0.29, 1);
+  return sprite;
+};
+
+const selectGraphNode = (
+  THREE,
+  event,
+  viewport,
+  camera,
+  graphGroup,
+  raycaster,
+  pointer,
+  nodeMeshes,
+  selection,
+) => {
+  const rect = viewport.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const intersections = raycaster.intersectObjects(nodeMeshes, false);
+  nodeMeshes.forEach((mesh) => {
+    mesh.scale.setScalar(1);
+  });
+  if (!intersections.length) {
+    updateGraphSelection(selection, null);
+    return;
+  }
+  const mesh = intersections[0].object;
+  mesh.scale.setScalar(1.22);
+  updateGraphSelection(selection, mesh.userData.node);
+  graphGroup.rotation.y += 0.02;
+};
+
+const updateGraphSelection = (selection, node, graph) => {
+  if (!selection) {
+    return;
+  }
+  if (!node) {
+    selection.innerHTML = `
+      <span>Selected Node</span>
+      <strong>Network Overview</strong>
+      <p>${graph?.nodes?.length || 0} nodes · ${graph?.edges?.length || 0} edges · Live shared graph</p>
+    `;
+    return;
+  }
+  selection.innerHTML = `
+    <span>${titleCase(node.type)}</span>
+    <strong>${node.label}</strong>
+    <p>${titleCase(node.risk || "linked")} signal · ${node.id}</p>
   `;
 };
 
@@ -467,6 +766,7 @@ const renderCase = (caseData) => {
   document.querySelector("#network-graph").innerHTML = renderNetworkGraph(
     networkOutput?.data?.network_graph,
   );
+  mountNetworkGraph3d(networkOutput?.data?.network_graph);
   document.querySelector("#campaign-detection").innerHTML = renderCampaignDetection(
     networkOutput?.data?.campaign_detection,
   );
