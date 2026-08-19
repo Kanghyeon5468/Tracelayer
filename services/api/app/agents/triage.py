@@ -29,6 +29,7 @@ class TriageAgent(BaseInvestigationAgent):
         transaction = context.trigger_transaction
         score = 20
         factors = [{"name": "base_review_score", "points": 20, "reason": "Flagged transaction."}]
+        model_armor_demo = self._inspect_external_memo(context)
 
         if classify_transfer_amount(transaction.amount) == "high":
             score += 30
@@ -135,11 +136,45 @@ class TriageAgent(BaseInvestigationAgent):
                     "high_threshold": self.risk_policy.high_threshold,
                     "critical_threshold": self.risk_policy.critical_threshold,
                 },
+                "model_armor_demo": model_armor_demo,
                 "adk_runtime": self._adk_binding(),
             },
         )
         context.agent_outputs.append(output)
         return output
+
+    def _inspect_external_memo(self, context: InvestigationContext) -> dict:
+        memo = context.trigger_transaction.external_memo
+        if not memo:
+            return {
+                "external_input_present": False,
+                "prompt_injection_detected": False,
+                "blocked": False,
+                "investigation_continued": True,
+            }
+
+        findings = self.reasoner.guardrail.inspect_text(memo, "external-transaction-memo")
+        context.guardrail_findings = self.reasoner.guardrail.merge_findings(
+            [context.guardrail_findings, findings]
+        )
+        blocked = any(finding.blocked for finding in findings)
+        if blocked:
+            context.trigger_transaction.risk_flags = sorted(
+                set(context.trigger_transaction.risk_flags + ["prompt_injection_attempt"])
+            )
+
+        return {
+            "external_input_present": True,
+            "prompt_injection_detected": blocked,
+            "blocked": blocked,
+            "pii_access_denied": blocked,
+            "investigation_continued": True,
+            "finding_ids": [finding.finding_id for finding in findings],
+            "safe_handling": (
+                "External memo was inspected, blocked from model instructions, and kept out "
+                "of the Gemini prompt. The investigation continued with structured features."
+            ),
+        }
 
     def _adk_binding(self) -> dict:
         if not self.adk_runtime:
@@ -167,4 +202,5 @@ class TriageAgent(BaseInvestigationAgent):
             "status": transaction.status,
             "risk_flags": transaction.risk_flags,
             "related_transaction_count": len(context.related_transactions),
+            "external_memo": "withheld_from_model" if transaction.external_memo else None,
         }

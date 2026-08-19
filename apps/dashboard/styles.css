@@ -258,7 +258,22 @@ label {
 
 .federated {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.federated-section {
+  display: grid;
+  gap: 12px;
+}
+
+.federated-section h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -279,6 +294,58 @@ label {
 
 .metric strong {
   overflow-wrap: anywhere;
+}
+
+.privacy-metric {
+  border-color: rgba(15, 118, 110, 0.45);
+  background: #f0fdfa;
+}
+
+.privacy-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.privacy-list div {
+  min-width: 0;
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+}
+
+.privacy-list strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.privacy-list p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.local-evidence {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.armor-callout {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dbe4ef;
+  border-radius: 6px;
+  margin-top: 10px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.armor-callout.blocked {
+  border-color: rgba(180, 35, 24, 0.35);
+  background: #fff7f5;
+}
+
+.armor-callout strong {
+  color: var(--risk);
 }
 
 .registry-grid {
@@ -594,7 +661,8 @@ label {
     grid-template-columns: 1fr;
   }
 
-  .federated {
+  .metric-grid,
+  .privacy-list {
     grid-template-columns: 1fr;
   }
 

@@ -194,6 +194,21 @@ const renderAdkRuntime = (runtime) => {
   return `<p class="muted-line">Runtime: ${label}${model}${agent}</p>`;
 };
 
+const renderModelArmorDemo = (demo) => {
+  if (!demo?.external_input_present) {
+    return "";
+  }
+  const state = demo.blocked ? "Prompt Injection Blocked" : "External Input Cleared";
+  return `
+    <div class="armor-callout ${demo.blocked ? "blocked" : ""}">
+      <strong>${state}</strong>
+      <p>External instruction blocked: ${demo.prompt_injection_detected}</p>
+      <p>PII access denied: ${demo.pii_access_denied}</p>
+      <p>Investigation continued: ${demo.investigation_continued}</p>
+    </div>
+  `;
+};
+
 const apiHeaders = () => {
   const headers = {
     "X-Tracelayer-User": localStorage.getItem("tracelayer.supervisorId") || "supervisor@example.com",
@@ -288,6 +303,7 @@ const renderCase = (caseData) => {
         <div class="item">
           <strong>${titleCase(item.agent_id)}</strong>
           <p>${item.summary}</p>
+          ${renderModelArmorDemo(item.data?.model_armor_demo)}
           ${renderAdkRuntime(item.data?.adk_runtime)}
         </div>
       `,
@@ -326,23 +342,54 @@ const renderCase = (caseData) => {
     .join("") || '<div class="item"><strong>No links searched</strong><p>This plan did not run network discovery.</p></div>';
 
   const signal = caseData.federated_risk_signal;
+  const linkCount = caseData.network_links?.length || 0;
+  const evidenceCount = caseData.evidence_timeline?.length || 0;
+  const topPattern = signal?.node_indicators?.[0]
+    ? titleCase(signal.node_indicators[0].split(":").pop())
+    : "No External Pattern";
   document.querySelector("#federated-signal").innerHTML = signal
     ? `
-      <div class="metric">
-        <span>Risk</span>
-        <strong>${signal.federated_risk_score}/100</strong>
+      <div class="federated-section">
+        <h3>Federated Intelligence</h3>
+        <div class="metric-grid">
+          <div class="metric">
+            <span>Risk Score</span>
+            <strong>${signal.federated_risk_score}%</strong>
+          </div>
+          <div class="metric">
+            <span>Pattern</span>
+            <strong>${topPattern}</strong>
+          </div>
+          <div class="metric">
+            <span>Confidence</span>
+            <strong>${signal.federated_risk_score >= 80 ? "High" : "Medium"}</strong>
+          </div>
+          <div class="metric">
+            <span>Contributing Orgs</span>
+            <strong>${signal.participating_nodes.length}</strong>
+          </div>
+          <div class="metric privacy-metric">
+            <span>External Customer Records Exposed</span>
+            <strong>0</strong>
+          </div>
+          <div class="metric">
+            <span>DP Epsilon</span>
+            <strong>${signal.differential_privacy.epsilon}</strong>
+          </div>
+        </div>
+        <div class="privacy-list">
+          <div><strong>Secure Aggregation</strong><p>${titleCase(signal.secure_aggregation.server_observes)}</p></div>
+          <div><strong>Provenance</strong><p>${signal.provenance_hash.slice(0, 16)}...</p></div>
+          <div><strong>Campaign</strong><p>${signal.campaign_signature}</p></div>
+        </div>
       </div>
-      <div class="metric">
-        <span>Campaign</span>
-        <strong>${signal.campaign_signature}</strong>
-      </div>
-      <div class="metric">
-        <span>DP Epsilon</span>
-        <strong>${signal.differential_privacy.epsilon}</strong>
-      </div>
-      <div class="metric">
-        <span>Nodes</span>
-        <strong>${signal.participating_nodes.length}</strong>
+      <div class="federated-section local-evidence">
+        <h3>Local Investigation Evidence</h3>
+        <div class="privacy-list">
+          <div><strong>Network Links</strong><p>${linkCount} local graph links found by TraceLayer.</p></div>
+          <div><strong>Timeline Events</strong><p>${evidenceCount} events built from local records and safe federated signal metadata.</p></div>
+          <div><strong>Raw External Records</strong><p>Not received, stored, or displayed.</p></div>
+        </div>
       </div>
     `
     : '<div class="item"><strong>No signal</strong><p>No federated signal was attached.</p></div>';
@@ -441,6 +488,34 @@ const runDemo = async () => {
   } finally {
     button.disabled = false;
     button.textContent = "Run Demo Case";
+  }
+};
+
+const runAttackDemo = async () => {
+  const button = document.querySelector("#run-attack-demo");
+  button.disabled = true;
+  button.textContent = "Attacking...";
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/cases/investigate`, {
+      method: "POST",
+      headers: {
+        ...apiHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ transaction_id: "tx-9701" }),
+    });
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    const caseData = await response.json();
+    renderCase(caseData);
+    publishCaseUpdate(caseData, "dashboard.attack_demo");
+  } catch (error) {
+    renderCase(fallbackCase);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Run Attack Demo";
   }
 };
 
@@ -579,6 +654,7 @@ window.addEventListener("storage", (event) => {
 });
 
 document.querySelector("#run-demo").addEventListener("click", runDemo);
+document.querySelector("#run-attack-demo").addEventListener("click", runAttackDemo);
 document.querySelector("#run-async-demo").addEventListener("click", runAsyncDemo);
 renderCase(fallbackCase);
 loadRuntimeConfig();

@@ -78,6 +78,30 @@ curl -s -X POST \
   https://tracelayer-api-235426782310.us-central1.run.app/cases/demo
 ```
 
+Prompt injection live demo:
+
+```bash
+curl -s -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: local-demo-key" \
+  -H "X-Tracelayer-Role: supervisor" \
+  --data '{"transaction_id":"tx-9701"}' \
+  https://tracelayer-api-235426782310.us-central1.run.app/cases/investigate
+```
+
+Cloud Logging trace query:
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="tracelayer-api" AND jsonPayload.case_id="CASE_ID"' \
+  --project $PROJECT_ID \
+  --limit 20 \
+  --format json
+```
+
+Every structured trace entry includes `case_id`, `agent_id`, `agent_version`, `tool`, `latency_ms`, and `status`. HTTP requests also include `logging.googleapis.com/trace` for Cloud Run request-log correlation.
+
 ## Production Changes
 
 - Move API keys to Secret Manager.

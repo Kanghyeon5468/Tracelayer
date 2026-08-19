@@ -53,6 +53,7 @@ from app.memory.risk_policy_store import (
     create_risk_policy_store,
 )
 from app.observability.audit import AuditLedger
+from app.observability.cloud_logging import CloudTraceLogger
 from app.security.context import build_service_context
 from app.security.guardrails import ModelArmorGuardrail
 from app.security.policy import PolicyEngine
@@ -85,6 +86,7 @@ class FraudInvestigationFleet:
         self.job_store = job_store or create_job_store(settings)
         self.risk_policy_store = risk_policy_store or create_risk_policy_store(settings)
         self.audit_ledger = audit_ledger or AuditLedger(settings)
+        self.trace_logger = CloudTraceLogger()
         self.policy_engine = policy_engine or PolicyEngine()
         self.guardrail = guardrail or ModelArmorGuardrail()
         self.gateway = AgentGateway(self.policy_engine, self.guardrail, self.audit_ledger)
@@ -109,6 +111,14 @@ class FraudInvestigationFleet:
         )
         if not actor_decision.allowed:
             raise PermissionError(actor_decision.reason)
+        self.trace_logger.emit(
+            message="Investigation started.",
+            request=request,
+            case_id=None,
+            tool="FraudInvestigationFleet.investigate",
+            status="running",
+            metadata={"transaction_id": transaction_id},
+        )
 
         trigger = self.repository.get_transaction(transaction_id)
         customer = self.repository.get_customer(trigger.customer_id)
@@ -205,6 +215,18 @@ class FraudInvestigationFleet:
         )
         case = case.model_copy(update={"audit_chain_tip": final_event.event_hash})
         self.report_writer.write_markdown(case)
+        self.trace_logger.emit(
+            message="Investigation persisted.",
+            request=request,
+            case_id=case.case_id,
+            tool="FraudInvestigationFleet.investigate",
+            status="succeeded",
+            metadata={
+                "risk_score": case.risk_score,
+                "priority": case.priority,
+                "agent_count": len(case.agent_outputs),
+            },
+        )
         return case
 
     def _execute_investigation_plan(
@@ -310,6 +332,18 @@ class FraudInvestigationFleet:
             pubsub_topic=message.topic,
             pubsub_message_id=message.message_id,
         )
+        self.trace_logger.emit(
+            message="Investigation job published to Pub/Sub.",
+            request=request,
+            tool="PubSub.publish",
+            status="queued",
+            metadata={
+                "job_id": job_id,
+                "transaction_id": transaction_id,
+                "pubsub_topic": message.topic,
+                "pubsub_message_id": message.message_id,
+            },
+        )
         return self.job_store.save_job(queued)
 
     def run_investigation_job(
@@ -332,10 +366,25 @@ class FraudInvestigationFleet:
             return self.job_store.save_job(failed)
 
         running = self.job_store.save_job(touch_job(job, status=InvestigationJobStatus.RUNNING))
+        self.trace_logger.emit(
+            message="Investigation job running.",
+            request=request,
+            tool="FraudInvestigationFleet.run_investigation_job",
+            status="running",
+            metadata={"job_id": job_id, "transaction_id": running.transaction_id},
+        )
         try:
             case = self.investigate(running.transaction_id, request, create_case_run=True)
         except Exception as exc:
             failed = touch_job(running, status=InvestigationJobStatus.FAILED, error=str(exc))
+            self.trace_logger.emit(
+                message="Investigation job failed.",
+                severity="ERROR",
+                request=request,
+                tool="FraudInvestigationFleet.run_investigation_job",
+                status="failed",
+                metadata={"job_id": job_id, "error": str(exc)},
+            )
             return self.job_store.save_job(failed)
 
         succeeded = touch_job(
@@ -343,6 +392,14 @@ class FraudInvestigationFleet:
             status=InvestigationJobStatus.SUCCEEDED,
             case_id=case.case_id,
             error=None,
+        )
+        self.trace_logger.emit(
+            message="Investigation job succeeded.",
+            request=request,
+            case_id=case.case_id,
+            tool="FraudInvestigationFleet.run_investigation_job",
+            status="succeeded",
+            metadata={"job_id": job_id, "transaction_id": running.transaction_id},
         )
         return self.job_store.save_job(succeeded)
 
@@ -364,6 +421,17 @@ class FraudInvestigationFleet:
             decision="allow",
             reason="Authenticated Pub/Sub push delivered an investigation job.",
             metadata={
+                "subscription": envelope.subscription,
+                "pubsub_message_id": envelope.message.message_id,
+            },
+        )
+        self.trace_logger.emit(
+            message="Pub/Sub push received by Cloud Run worker.",
+            request=request,
+            tool="CloudRunPubSubWorker",
+            status="received",
+            metadata={
+                "job_id": job_id,
                 "subscription": envelope.subscription,
                 "pubsub_message_id": envelope.message.message_id,
             },
@@ -564,6 +632,17 @@ class FraudInvestigationFleet:
             }
         )
         self.report_writer.write_markdown(updated_case)
+        self.trace_logger.emit(
+            message="Human approval decision persisted.",
+            request=request,
+            case_id=case_id,
+            tool="FraudInvestigationFleet.decide_approval",
+            status=decision_request.decision,
+            metadata={
+                "approval_id": decision_request.approval_id,
+                "decision": decision_request.decision,
+            },
+        )
         return updated_case
 
     def _request_more_evidence(
@@ -650,6 +729,21 @@ class FraudInvestigationFleet:
             }
         )
         self.report_writer.write_markdown(updated_case)
+        self.trace_logger.emit(
+            message="Human feedback requested more evidence and agents reran.",
+            request=request,
+            case_id=case.case_id,
+            tool="FraudInvestigationFleet.request_more_evidence",
+            status="more_evidence",
+            metadata={
+                "superseded_approval_id": decision_request.approval_id,
+                "new_approval_id": (
+                    updated_case.approval_request.approval_id
+                    if updated_case.approval_request
+                    else None
+                ),
+            },
+        )
         return updated_case
 
     def get_risk_policy(self, request: RequestContext | None = None) -> RiskPolicy:

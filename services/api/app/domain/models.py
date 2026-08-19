@@ -99,6 +99,7 @@ class Transaction(BaseModel):
     timestamp: datetime
     status: str
     risk_flags: list[str] = Field(default_factory=list)
+    external_memo: str | None = None
 
 
 class Customer(BaseModel):
@@ -238,6 +239,8 @@ class RequestContext(BaseModel):
     role: ActorRole
     scopes: list[str] = Field(default_factory=list)
     request_id: str
+    trace_id: str | None = None
+    cloud_trace: str | None = None
     source_ip: str | None = None
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -28,6 +28,7 @@ from app.observability.audit import AuditLedger
 from app.security.auth import get_request_context
 from app.security.policy import PolicyEngine
 from app.security.redaction import redact_case_for_role
+from app.security.context import build_service_context
 
 
 class NoCacheStaticFiles(StaticFiles):
@@ -139,9 +140,20 @@ def run_investigation_job(
 
 
 @app.post("/pubsub/investigations", response_model=InvestigationJob)
-def run_pubsub_investigation_worker(envelope: PubSubPushEnvelope) -> InvestigationJob:
+def run_pubsub_investigation_worker(
+    envelope: PubSubPushEnvelope,
+    request: Request,
+) -> InvestigationJob:
+    trace_id = _trace_id_from_header(request.headers.get("X-Cloud-Trace-Context"))
+    worker_context = build_service_context(
+        actor_id="pubsub-worker@tracelayer",
+        trace_id=trace_id,
+    )
     return _run_or_raise(
-        lambda: FraudInvestigationFleet(settings).run_pubsub_investigation_worker(envelope)
+        lambda: FraudInvestigationFleet(settings).run_pubsub_investigation_worker(
+            envelope,
+            worker_context,
+        )
     )
 
 
@@ -239,3 +251,10 @@ def _run_or_raise(handler):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _trace_id_from_header(header: str | None) -> str | None:
+    if not header:
+        return None
+    trace_id = header.split("/", maxsplit=1)[0].strip()
+    return trace_id or None

@@ -15,7 +15,7 @@ The current deployed demo runs on Cloud Run with authenticated access, backend-o
 | Area | Current Status |
 | --- | --- |
 | Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
-| Demo Dashboard | `/dashboard` shows case summary, dynamic investigation plan, agent findings, network links, Veritas signal, compliance, approval state, async job state, and Agent Registry. |
+| Demo Dashboard | `/dashboard` shows case summary, dynamic investigation plan, agent findings, privacy-separated Veritas signal, network links, compliance, approval state, async job state, and Agent Registry. |
 | Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept, deny, request more evidence, and tune stored risk thresholds. |
 | Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions with low, medium, high, and critical priorities while avoiding recent repeats. |
 | Async Demo Flow | `Run Async Demo` enqueues an investigation job; Cloud Run receives the real Pub/Sub push at `/pubsub/investigations` and stores job completion in Firestore. |
@@ -45,6 +45,8 @@ TraceLayer now includes concrete enterprise controls in the runnable backend:
 | Pub/Sub Worker | `GooglePubSubBus` publishes queued work to Pub/Sub; authenticated push delivery invokes `/pubsub/investigations` on Cloud Run. |
 | Async Job State | `InvestigationJob` stores queued/running/succeeded/failed state in local JSONL or Firestore. |
 | Agent Registry UI | Dashboard renders service accounts, permissions, versions, and data access classes from `/agents`. |
+| Prompt Injection Demo | `tx-9701` includes a malicious external memo; Model Armor blocks it from Gemini prompts while the investigation continues. |
+| Cloud Logging Trace | Structured JSON logs include `case_id`, `agent_id`, `agent_version`, `tool`, `latency_ms`, `status`, and Cloud Trace correlation fields. |
 
 ## Demo Scenario
 
@@ -68,7 +70,7 @@ The planner changes the workflow by risk:
 | High / Critical | `deep_network_investigation` | Triage, Network, Evidence, Compliance, Case Manager |
 | Missing Data | `pause_for_more_data` | Triage, Case Manager request-more-data pause |
 
-The demo currently includes seven flagged trigger scenarios:
+The demo currently includes eight flagged trigger scenarios:
 
 | Trigger | Expected Priority | Scenario |
 | --- | --- | --- |
@@ -79,6 +81,37 @@ The demo currently includes seven flagged trigger scenarios:
 | `tx-9601` | High | Cross-border wire with shared IP and unusual timing, requiring supervisor approval. |
 | `tx-9001` | Critical | High-value overseas wire transfer to Singapore with unusual timing and shared infrastructure. |
 | `tx-9101` | Critical | High-value UAE wire transfer with shared device, IP, and counterparty signals. |
+| `tx-9701` | Critical | Prompt injection live demo: external memo asks the model to ignore instructions and export customer account numbers. |
+
+## Live Security Demo
+
+Use `Run Attack Demo` on the dashboard to trigger `tx-9701`.
+
+Expected result:
+
+1. Triage detects prompt injection in the external transaction memo.
+2. The malicious memo is blocked from the Gemini prompt.
+3. PII access is denied.
+4. The investigation continues with structured transaction features.
+5. Guardrails show blocked prompt-injection findings.
+6. Cloud Logging receives structured trace entries for every agent run.
+
+Cloud Logging query shape:
+
+```text
+resource.type="cloud_run_revision"
+resource.labels.service_name="tracelayer-api"
+jsonPayload.case_id="CASE_ID"
+```
+
+For agent-level filtering:
+
+```text
+resource.type="cloud_run_revision"
+resource.labels.service_name="tracelayer-api"
+jsonPayload.agent_id="triage-agent"
+jsonPayload.status="succeeded"
+```
 
 ## Agent Fleet
 

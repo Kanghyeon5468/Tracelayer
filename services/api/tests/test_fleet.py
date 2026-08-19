@@ -69,6 +69,7 @@ def test_random_demo_uses_flagged_demo_transactions(tmp_path: Path, monkeypatch)
         "tx-9401",
         "tx-9501",
         "tx-9601",
+        "tx-9701",
     }.issubset(set(demo_ids))
 
     monkeypatch.setattr(fleet_module.random, "choice", lambda values: "tx-9201")
@@ -98,9 +99,18 @@ def test_random_demo_avoids_recent_demo_repeats(tmp_path: Path, monkeypatch) -> 
     assert second_case.trigger_transaction_id == "tx-9101"
     assert third_case.trigger_transaction_id == "tx-9201"
     assert candidate_sets == [
-        ["tx-9001", "tx-9101", "tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601"],
-        ["tx-9101", "tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601"],
-        ["tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601"],
+        [
+            "tx-9001",
+            "tx-9101",
+            "tx-9201",
+            "tx-9301",
+            "tx-9401",
+            "tx-9501",
+            "tx-9601",
+            "tx-9701",
+        ],
+        ["tx-9101", "tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601", "tx-9701"],
+        ["tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601", "tx-9701"],
     ]
 
 
@@ -124,6 +134,25 @@ def test_demo_scenarios_cover_risk_priority_range(tmp_path: Path) -> None:
     assert results["tx-9501"].approval_request is not None
     assert results["tx-9501"].approval_request.action == "manual_case_review"
     assert results["tx-9601"].approval_request is not None
+    assert results["tx-9701"].priority == "critical"
+
+
+def test_prompt_injection_demo_blocks_external_instruction(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    case = fleet.investigate("tx-9701", create_case_run=True)
+    triage_output = next(
+        output for output in case.agent_outputs if output.agent_id == "triage-agent"
+    )
+    demo = triage_output.data["model_armor_demo"]
+
+    assert case.status == "needs_approval"
+    assert demo["external_input_present"] is True
+    assert demo["prompt_injection_detected"] is True
+    assert demo["blocked"] is True
+    assert demo["pii_access_denied"] is True
+    assert demo["investigation_continued"] is True
+    assert any(finding.control == "prompt_injection" for finding in case.guardrail_findings)
 
 
 def test_case_manager_plans_low_risk_lightweight_review(tmp_path: Path) -> None:
