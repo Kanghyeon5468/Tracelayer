@@ -11,6 +11,7 @@ from app.agents import (
     AgentRegistry,
     CaseManagerAgent,
     CaseManagerPlanningAgent,
+    CampaignTraceAgent,
     ComplianceAgent,
     EvidenceAgent,
     NetworkAgent,
@@ -153,6 +154,10 @@ class FraudInvestigationFleet:
                 policy_text,
             ),
             "check_policy_and_pii": ComplianceAgent(self.registry.get("compliance-agent")),
+            "trace_cluster_funds": CampaignTraceAgent(
+                self.registry.get("network-agent"),
+                self.adk_runtime,
+            ),
         }
         case_manager_agent = CaseManagerAgent(
             self.registry.get("case-manager-agent"),
@@ -178,9 +183,15 @@ class FraudInvestigationFleet:
             context,
             request,
             allowed_actions={"score_transaction"},
+            planning_agent=planning_agent,
         )
         self.gateway.run_agent(planning_agent, context, request)
-        self._execute_investigation_plan(planned_action_handlers, context, request)
+        self._execute_investigation_plan(
+            planned_action_handlers,
+            context,
+            request,
+            planning_agent=planning_agent,
+        )
 
         case = InvestigationCase(
             case_id=context.case_id,
@@ -253,21 +264,77 @@ class FraudInvestigationFleet:
         context: InvestigationContext,
         request: RequestContext,
         allowed_actions: set[str] | None = None,
+        planning_agent: CaseManagerPlanningAgent | None = None,
     ) -> None:
         if not context.investigation_plan:
             raise ValueError("Case Manager did not produce an investigation plan.")
 
-        for step in context.investigation_plan.steps:
-            if allowed_actions is not None and step.action not in allowed_actions:
-                continue
-            if step.status != PlanStepStatus.PLANNED:
-                continue
-            agent = planned_action_handlers.get(step.action)
-            if not agent:
-                step.status = PlanStepStatus.SKIPPED
-                continue
-            self.gateway.run_agent(agent, context, request)
-            step.status = PlanStepStatus.COMPLETED
+        while True:
+            replanned = False
+            for step in context.investigation_plan.steps:
+                if allowed_actions is not None and step.action not in allowed_actions:
+                    continue
+                if step.status != PlanStepStatus.PLANNED:
+                    continue
+                agent = planned_action_handlers.get(step.action)
+                if not agent:
+                    step.status = PlanStepStatus.SKIPPED
+                    continue
+                self.gateway.run_agent(agent, context, request)
+                step.status = PlanStepStatus.COMPLETED
+                if (
+                    planning_agent
+                    and allowed_actions is None
+                    and step.action == "search_related_transactions"
+                    and self._should_replan_after_network(context)
+                ):
+                    self.trace_logger.emit(
+                        message="Network findings triggered adaptive replanning.",
+                        request=request,
+                        case_id=context.case_id,
+                        agent_id=planning_agent.identity.agent_id,
+                        agent_version=planning_agent.identity.version,
+                        tool="CaseManagerPlanningAgent.adaptive_replan",
+                        status="running",
+                        metadata={
+                            "previous_strategy": context.investigation_plan.strategy,
+                            "trigger_action": step.action,
+                        },
+                    )
+                    self.gateway.run_agent(planning_agent, context, request)
+                    replanned = True
+                    break
+            if not replanned:
+                break
+
+    @staticmethod
+    def _should_replan_after_network(context: InvestigationContext) -> bool:
+        if not context.investigation_plan:
+            return False
+        if context.investigation_plan.strategy == "campaign_escalation_replan":
+            return False
+        if any(step.action == "trace_cluster_funds" for step in context.investigation_plan.steps):
+            return False
+        latest_network_output = next(
+            (
+                output
+                for output in reversed(context.agent_outputs)
+                if output.agent_id == "network-agent"
+                and output.data.get("campaign_detection")
+            ),
+            None,
+        )
+        if not latest_network_output:
+            return False
+        campaign = latest_network_output.data.get("campaign_detection") or {}
+        return bool(
+            campaign.get("detected")
+            and (
+                campaign.get("severity") in {"high", "critical"}
+                or campaign.get("network_link_count", 0) >= 6
+                or campaign.get("linked_transaction_count", 0) >= 4
+            )
+        )
 
     def investigate_random_demo(
         self,

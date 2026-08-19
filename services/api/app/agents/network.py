@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import UTC, datetime
 from typing import Any
 
 from app.adk_runtime import AdkAgentRuntime
 from app.agents.base import BaseInvestigationAgent
 from app.connectors.bigquery_network import BigQueryNetworkSearch
-from app.domain.models import AgentIdentity, AgentOutput, InvestigationContext, NetworkLink, Transaction
+from app.domain.models import (
+    AgentIdentity,
+    AgentOutput,
+    EvidenceEvent,
+    InvestigationContext,
+    NetworkLink,
+    Transaction,
+)
 
 
 class NetworkAgent(BaseInvestigationAgent):
@@ -271,5 +279,110 @@ class NetworkAgent(BaseInvestigationAgent):
                 "You are TraceLayer's Network Agent. Use approved related-transaction "
                 "search tools to find connected accounts, devices, IP addresses, emails, "
                 "and counterparties without exposing unnecessary PII."
+            ),
+        ).as_dict()
+
+
+class CampaignTraceAgent(BaseInvestigationAgent):
+    required_permissions = ["transactions.read", "graph.search"]
+
+    def __init__(
+        self,
+        identity: AgentIdentity,
+        adk_runtime: AdkAgentRuntime | None = None,
+    ) -> None:
+        self.identity = identity
+        self.adk_runtime = adk_runtime
+
+    def run(self, context: InvestigationContext) -> AgentOutput:
+        related_transactions = sorted(
+            context.related_transactions,
+            key=lambda transaction: transaction.timestamp,
+        )
+        total_related_amount = round(
+            sum(transaction.amount for transaction in related_transactions),
+            2,
+        )
+        counterparties = Counter(
+            transaction.counterparty_account_id for transaction in related_transactions
+        )
+        countries = Counter(transaction.country for transaction in related_transactions)
+        device_ids = sorted(
+            {
+                transaction.device_id
+                for transaction in related_transactions
+                if transaction.device_id == context.trigger_transaction.device_id
+            }
+        )
+        shared_ip_addresses = sorted(
+            {
+                transaction.ip_address
+                for transaction in related_transactions
+                if transaction.ip_address == context.trigger_transaction.ip_address
+            }
+        )
+        fund_path = [
+            {
+                "transaction_id": transaction.transaction_id,
+                "amount": transaction.amount,
+                "currency": transaction.currency,
+                "country": transaction.country,
+                "counterparty_account_id": transaction.counterparty_account_id,
+                "timestamp": transaction.timestamp.isoformat(),
+            }
+            for transaction in related_transactions[:8]
+        ]
+        dominant_counterparty = counterparties.most_common(1)[0][0] if counterparties else None
+
+        context.evidence_timeline.append(
+            EvidenceEvent(
+                timestamp=datetime.now(UTC),
+                event_type="campaign_trace",
+                description=(
+                    f"Adaptive replanning traced {len(related_transactions)} related "
+                    f"transactions totaling {total_related_amount:.2f} "
+                    f"{context.trigger_transaction.currency} across "
+                    f"{len(counterparties)} counterparties."
+                ),
+                source="network-agent",
+                related_transaction_id=context.trigger_transaction.transaction_id,
+            )
+        )
+
+        output = AgentOutput(
+            agent_id=self.identity.agent_id,
+            summary=(
+                f"Adaptive campaign trace reviewed {len(related_transactions)} connected "
+                f"transactions, {len(context.network_links)} network links, and "
+                f"{len(counterparties)} counterparties after Network discovered a cluster."
+            ),
+            confidence=0.84,
+            data={
+                "trace_action": "trace_cluster_funds",
+                "related_transaction_count": len(related_transactions),
+                "network_link_count": len(context.network_links),
+                "total_related_amount": total_related_amount,
+                "dominant_counterparty": dominant_counterparty,
+                "shared_devices": device_ids,
+                "shared_ip_addresses": shared_ip_addresses,
+                "country_counts": dict(sorted(countries.items())),
+                "counterparty_counts": dict(sorted(counterparties.items())),
+                "fund_path": fund_path,
+                "adk_runtime": self._adk_binding(),
+            },
+        )
+        context.agent_outputs.append(output)
+        return output
+
+    def _adk_binding(self) -> dict:
+        if not self.adk_runtime:
+            return {"enabled": False, "available": False, "framework": "google_adk"}
+        return self.adk_runtime.bind_agent(
+            self.identity,
+            description="Traces clustered fund movement after adaptive replanning.",
+            instruction=(
+                "You are TraceLayer's Network Agent in campaign-tracing mode. Summarize "
+                "connected fund movement, shared infrastructure, and counterparties using "
+                "only approved related-transaction evidence."
             ),
         ).as_dict()

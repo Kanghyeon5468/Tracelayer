@@ -65,7 +65,7 @@ class AgentGateway:
             )
             raise PermissionError(decision.reason)
 
-        raw_output = agent.run(context)
+        raw_output = self._run_agent(agent, context, request)
         sanitized_output = self.guardrail.sanitize_output(raw_output)
         context.agent_outputs[-1] = sanitized_output
 
@@ -104,3 +104,30 @@ class AgentGateway:
                 "guardrail_finding_count": len(context.guardrail_findings),
             },
         )
+
+    @staticmethod
+    def _run_agent(
+        agent: BaseInvestigationAgent,
+        context: InvestigationContext,
+        request: RequestContext,
+    ):
+        adk_runtime = getattr(agent, "adk_runtime", None)
+        if not adk_runtime:
+            return agent.run(context)
+
+        return adk_runtime.run_agent_tool(
+            identity=agent.identity,
+            context=context,
+            request=request,
+            tool_name=agent.__class__.__name__,
+            description=getattr(agent, "adk_description", agent.identity.display_name),
+            instruction=getattr(
+                agent,
+                "adk_instruction",
+                (
+                    f"You are {agent.identity.display_name}. Run the approved "
+                    "TraceLayer investigation tool and return structured evidence."
+                ),
+            ),
+            tool_callback=lambda: agent.run(context),
+        ).output

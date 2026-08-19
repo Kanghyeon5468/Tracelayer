@@ -191,10 +191,16 @@ const renderAdkRuntime = (runtime) => {
   if (!runtime) {
     return "";
   }
-  const label = runtime.available ? "Google ADK" : "Local agent fallback";
+  const label = runtime.execution_mode === "adk_runner"
+    ? "Google ADK Runner"
+    : runtime.available
+      ? "Google ADK"
+      : "Local agent fallback";
   const model = runtime.model ? ` · ${runtime.model}` : "";
   const agent = runtime.agent_name ? ` · ${runtime.agent_name}` : "";
-  return `<p class="muted-line">Runtime: ${label}${model}${agent}</p>`;
+  const tool = runtime.tool_name ? ` · tool ${runtime.tool_name}` : "";
+  const session = runtime.session_id ? ` · session ${runtime.session_id}` : "";
+  return `<p class="muted-line">Runtime: ${label}${model}${agent}${tool}${session}</p>`;
 };
 
 const renderModelArmorDemo = (demo) => {

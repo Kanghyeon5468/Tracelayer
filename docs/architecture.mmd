@@ -6,7 +6,7 @@ flowchart LR
     Gateway --> Registry[Agent Registry]
     Gateway --> Policy[Policy Engine]
     Gateway --> Planner[Case Manager Dynamic Planner]
-    Gateway --> ADK[Google ADK Agent Definitions]
+    Gateway --> ADK[Google ADK Runner and Session]
     Gateway --> Memory[Firestore or Append-only Memory Bank]
     Gateway --> Armor[Model Armor Guardrails]
     Gateway --> Audit[Hash-chained Audit Ledger]
@@ -14,15 +14,19 @@ flowchart LR
     Gateway --> PubSub[Pub/Sub Investigation Jobs]
     PubSub --> Worker[Authenticated Push Worker]
     Worker --> Planner
-    Planner --> Triage[Triage Agent]
-    Planner --> Network[Network Agent]
+    Planner --> ADK
+    ADK --> Triage[Triage Tool]
+    ADK --> Network[Network Tool]
     Planner --> Evidence[Evidence Agent]
     Planner --> Compliance[Compliance Agent]
-    Planner --> CaseManager[Case Manager Agent]
+    ADK --> CaseManager[Case Manager Tool]
     Triage --> Gemini[Gemini 2.5 Flash via Vertex AI]
     Triage --> Veritas
     Network --> BigQuery[BigQuery Related Transactions]
     Network --> Graph[3D Network Graph and Campaign Detection]
+    Graph --> Adaptive[Post-Network Adaptive Replan]
+    Adaptive --> Planner
+    Adaptive --> TraceFunds[Trace Cluster Funds Tool]
     Evidence --> Firestore[Firestore or Cloud SQL]
     Compliance --> Policies[Internal Policy Store]
     CaseManager --> Approvals[Human Approval Queue]

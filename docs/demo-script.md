@@ -17,6 +17,7 @@ TraceLayer turns one suspicious transaction into an auditable investigation case
 3. Show `Agent-generated Investigation Plan`.
 4. Explain that low-risk, medium-risk, high-risk, and missing-data cases follow different plans.
 5. For a high-risk or critical case, show Triage, Federated Intelligence, Network, Evidence, Compliance, and Human Approval.
+6. If campaign detection triggers, show the plan changing to `campaign_escalation_replan` and adding `trace_cluster_funds`.
 
 ## 1:45 - Investigation Depth
 
@@ -25,6 +26,7 @@ TraceLayer turns one suspicious transaction into an auditable investigation case
 3. Show `Local Investigation Evidence` separately.
 4. Rotate and zoom the interactive 3D network graph.
 5. Show `Fraud Campaign Detection` and shared infrastructure links.
+6. Open Agent Findings and point out `Google ADK Runner` session/tool metadata on Triage, Network, and Case Manager outputs.
 
 ## 2:30 - Human Feedback Loop
 
@@ -46,8 +48,8 @@ TraceLayer turns one suspicious transaction into an auditable investigation case
 Show the architecture diagram and explain:
 
 - Cloud Run hosts the Case API.
-- Google ADK agent definitions bind the core fleet.
-- The Case Manager Planner chooses the investigation path.
+- Google ADK Runner sessions wrap approved Triage, Network, and Case Manager tool execution.
+- The Case Manager Planner chooses the investigation path and can replan after Network findings.
 - Pub/Sub push runs asynchronous investigations on Cloud Run.
 - Firestore stores cases, approvals, risk thresholds, and job state.
 - BigQuery searches related transactions when available.

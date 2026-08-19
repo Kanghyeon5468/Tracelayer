@@ -1,153 +1,199 @@
 # TraceLayer
 
-TraceLayer is a fraud investigation agent fleet for banks, insurers, and fintech teams. It turns a suspicious transaction into an auditable investigation case by coordinating specialized agents for triage, network discovery, evidence collection, compliance checks, and human approval.
+TraceLayer is a privacy-preserving, multi-agent fraud investigation platform for banks, insurers, and fintech teams.
 
-TraceLayer now embeds selected Veritas federated-fraud primitives directly in the backend. It does not call a separate Veritas API for the demo path; the Triage Agent consumes an in-process federated risk signal built from secure aggregation, differential privacy accounting, and provenance hashing.
+It turns a suspicious transaction into an auditable investigation case by combining dynamic agent planning, Google ADK Runner-backed tool execution, federated fraud intelligence, network discovery, evidence collection, compliance checks, asynchronous execution, and human approval.
 
-Secrets never belong in the dashboard. The browser calls the TraceLayer backend only; Gemini, Vertex AI, Firestore, BigQuery, Pub/Sub, and Secret Manager access stay behind the FastAPI service boundary.
+TraceLayer is designed for the **Fortified Enterprise Fleet** track of the **All Things Agentic Hackathon**.
 
-The project is designed for the **Fortified Enterprise Fleet** track of the All Things Agentic Hackathon. It demonstrates enterprise agent concepts such as agent identity, persistent memory, guarded model calls, policy-aware tool access, asynchronous work distribution, and human-in-the-loop controls.
+## Why TraceLayer
+
+Fraud teams already detect suspicious activity, but investigation work is fragmented across transaction databases, customer records, device intelligence, policy documents, analytics warehouses, and approval workflows.
+
+TraceLayer separates two concerns:
+
+1. **Federated intelligence** learns cross-institution fraud signals without moving raw institutional records.
+2. **Local investigation agents** investigate each case using only the institution's authorized local data.
+
+A bank can benefit from fraud patterns learned across a federation without seeing another institution's customer records. The browser never receives Gemini, Vertex AI, Firestore, BigQuery, Pub/Sub, or Secret Manager credentials; all sensitive service access stays behind the FastAPI backend.
 
 ## Current Demo Status
-
-The current deployed demo runs on Cloud Run with authenticated access, backend-only Vertex AI Gemini calls, Google ADK agent definitions for the core fleet, Firestore-backed case/job state, randomized fraud scenarios, and a supervisor admin console.
 
 | Area | Current Status |
 | --- | --- |
 | Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
-| Demo Dashboard | `/dashboard` shows case summary, agent-generated investigation plan, agent findings, interactive 3D network graph, fraud campaign detection, privacy-separated Veritas signal, network links, compliance, approval state, async job state, and Agent Registry. |
-| Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept, deny, request more evidence, and tune stored risk thresholds. |
-| Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions with low, medium, high, critical, and missing-data paths while avoiding recent repeats. |
-| Async Demo Flow | `Run Async Demo` enqueues an investigation job; Cloud Run receives the real Pub/Sub push at `/pubsub/investigations` and stores job completion in Firestore. |
-| AI Provider | `vertex_ai` in Cloud Run, with `gemini-2.5-flash` configured backend-only. |
-| Google ADK | Triage, Network, and Case Manager agents bind to real `google.adk` `Agent` definitions when the package is installed. |
-| Memory | Firestore persists case snapshots, approval decisions, and async investigation jobs. |
-| Network Search | BigQuery-aware connector runs in `auto` mode and safely falls back to local demo data if BigQuery is not ready. |
+| Dashboard | `/dashboard` shows case summary, generated investigation plan, agent findings, ADK Runner metadata, privacy-separated federated risk, 3D network graph, campaign detection, compliance, approval state, async job state, and Agent Registry. |
+| Admin Console | `/admin` lists pending approvals and approval history. Supervisors can approve, deny, request more evidence, and save risk thresholds. |
+| Google ADK | Triage, Network, Campaign Trace, and Case Manager tools run through `google.adk.runners.Runner` with `InMemorySessionService` when ADK is available. |
+| Dynamic Planning | Case Manager creates an initial triage-first plan, replans after Triage, and can replan again after Network detects a campaign cluster. |
+| Vertex AI Gemini | Backend-only Gemini access is supported through Vertex AI using `gemini-2.5-flash`. |
+| Firestore | Persists case snapshots, approvals, risk policy, and async investigation jobs in deployed mode. |
+| Pub/Sub | Async jobs publish to Pub/Sub; an authenticated push subscription invokes `/pubsub/investigations` on Cloud Run. |
+| BigQuery | `BigQueryNetworkSearch` performs parameterized related-transaction search when configured, with deterministic local fallback metadata. |
+| Federated Intelligence | Embedded Veritas-inspired primitives generate aggregate fraud-risk signals without raw record movement. |
+| Security Demo | `tx-9701` demonstrates prompt-injection blocking and PII exfiltration denial through TraceLayer's guardrail boundary. |
+| Observability | Agent runs emit hash-chained audit events and structured Cloud Logging trace fields. |
 
-## Current Build Depth
-
-TraceLayer now includes concrete enterprise controls in the runnable backend:
-
-| Control | Implementation |
-| --- | --- |
-| Agent Identity | `AgentRegistry` assigns service identities, versions, permissions, and data access classes. |
-| Google ADK Runtime | `AdkAgentRuntime` creates Google ADK `Agent` definitions for Triage, Network, and Case Manager and records runtime metadata in each case output. |
-| Agent Gateway | `AgentGateway` authorizes every agent run before execution. |
-| Dynamic Planning | `CaseManagerPlanningAgent` creates an initial triage-first plan, replans after risk scoring, and the fleet executes only the selected action handlers. |
-| Least Privilege | `PolicyEngine` checks role scopes, agent permissions, and data classification. |
-| Model Armor Boundary | `ModelArmorGuardrail` scans model inputs and outputs for prompt injection and PII. |
-| Memory Bank | `MemoryBank` stores append-only local snapshots; `FirestoreMemoryBank` stores deployed case state and approval updates. |
-| Audit Ledger | `AuditLedger` writes hash-chained JSONL events for tamper-evident review. |
-| Risk Policy Store | `RiskPolicyStore` persists medium, high, and critical thresholds locally or in Firestore. |
-| Human Approval | Medium-risk cases create manual review requests; high-risk actions require supervisor approval before any hold. Reviewers can request more evidence, which reruns Evidence, Compliance, and Case Manager agents. |
-| Embedded Veritas Federation | `VeritasFederatedRiskEngine` produces cross-institution risk signals without raw record movement. |
-| BigQuery Network Boundary | `BigQueryNetworkSearch` uses parameterized BigQuery queries when available and records fallback metadata. |
-| Live Network Graph | `NetworkAgent` emits graph nodes and edges for trigger transactions, related transactions, and shared entities; the dashboard renders them as a draggable, zoomable Three.js graph whenever a live case update arrives. |
-| Fraud Campaign Detection | `NetworkAgent` combines shared-infrastructure links with the federated campaign signature to flag clustered fraud campaigns and recommend escalation. |
-| Pub/Sub Worker | `GooglePubSubBus` publishes queued work to Pub/Sub; authenticated push delivery invokes `/pubsub/investigations` on Cloud Run. |
-| Async Job State | `InvestigationJob` stores queued/running/succeeded/failed state in local JSONL or Firestore. |
-| Agent Registry UI | Dashboard renders service accounts, permissions, versions, and data access classes from `/agents`. |
-| Prompt Injection Demo | `tx-9701` includes a malicious external memo; Model Armor blocks it from Gemini prompts while the investigation continues. |
-| Cloud Logging Trace | Structured JSON logs include `case_id`, `agent_id`, `agent_version`, `tool`, `latency_ms`, `status`, and Cloud Trace correlation fields. |
-
-## Demo Scenario
-
-A customer's overseas wire transfer is flagged as suspicious.
-
-TraceLayer will:
-
-1. Score the transaction and assign investigation priority.
-2. Ask the Case Manager Agent to create an initial investigation plan.
-3. Run Triage, then let the Case Manager replan from the actual risk, federated signal, and missing-data state.
-4. Execute only the planned action handlers for the case priority.
-5. Render a live local network graph and detect whether the links form a fraud campaign.
-6. Check for PII exposure, policy violations, and unsafe automation.
-7. Generate a case summary, route medium-risk cases to analyst review, and request supervisor approval for high-risk actions.
-
-The planner changes the workflow by risk:
-
-| Priority | Planned Strategy | Agent Steps |
-| --- | --- | --- |
-| Low | `lightweight_review` | Triage, Compliance, Close |
-| Medium | `manual_review` | Triage, Evidence, Compliance, Case Manager |
-| High / Critical | `deep_network_investigation` | Triage, Federated Intelligence, Network, Evidence, Compliance, Human Approval |
-| Missing Data | `pause_for_more_data` | Triage, Request More Data, Pause |
-
-The demo currently includes nine flagged trigger scenarios:
-
-| Trigger | Expected Priority | Scenario |
-| --- | --- | --- |
-| `tx-9301` | Low | Low-value domestic card alert that remains open for analyst review. |
-| `tx-9401` | Medium | Moderate cross-border ACH vendor payment routed to manual analyst review without an asset hold request. |
-| `tx-9501` | Medium | Domestic high-value ACH payment with elevated federated signal, routed to manual review before closure. |
-| `tx-9201` | High | Small-business ACH case with high amount, velocity, shared IP, and unusual-hour signals. |
-| `tx-9601` | High | Cross-border wire with shared IP and unusual timing, requiring supervisor approval. |
-| `tx-9001` | Critical | High-value overseas wire transfer to Singapore with unusual timing and shared infrastructure. |
-| `tx-9101` | Critical | High-value UAE wire transfer with shared device, IP, and counterparty signals. |
-| `tx-9701` | Critical | Prompt injection live demo: external memo asks the model to ignore instructions and export customer account numbers. |
-| `tx-9801` | Missing Data | Incomplete ACH alert that causes the Case Manager to request additional evidence and pause. |
-
-## Live Security Demo
-
-Use `Run Attack Demo` on the dashboard to trigger `tx-9701`.
-
-Expected result:
-
-1. Triage detects prompt injection in the external transaction memo.
-2. The malicious memo is blocked from the Gemini prompt.
-3. PII access is denied.
-4. The investigation continues with structured transaction features.
-5. Guardrails show blocked prompt-injection findings.
-6. Cloud Logging receives structured trace entries for every agent run.
-
-Cloud Logging query shape:
+## Core Workflow
 
 ```text
-resource.type="cloud_run_revision"
-resource.labels.service_name="tracelayer-api"
-jsonPayload.case_id="CASE_ID"
+Suspicious Transaction
+        |
+        v
+FastAPI Case API
+        |
+        v
+Agent Gateway + Policy Engine
+        |
+        v
+Case Manager Planning Agent
+        |
+        v
+Google ADK Runner Session
+        |
+        v
+Approved TraceLayer Tool
+        |
+        v
+Case State + Audit + Cloud Logging
 ```
 
-For agent-level filtering:
+TraceLayer does not blindly run every agent in the same order. The Case Manager generates a plan, the Agent Gateway authorizes each selected tool, and ADK Runner wraps approved core tool execution.
+
+## Agentic Planning
+
+Current action vocabulary:
 
 ```text
-resource.type="cloud_run_revision"
-resource.labels.service_name="tracelayer-api"
-jsonPayload.agent_id="triage-agent"
-jsonPayload.status="succeeded"
+score_transaction
+compute_federated_intelligence
+search_related_transactions
+trace_cluster_funds
+build_evidence_timeline
+check_policy_and_pii
+request_manual_review
+request_supervisor_approval
+request_more_data
+pause_case
+close_case
 ```
+
+Current strategies:
+
+| Strategy | When Used | Planned Path |
+| --- | --- | --- |
+| `triage_first_routing` | Every new case before risk is known. | Case Manager -> Triage |
+| `lightweight_review` | Low-risk cases. | Triage -> Compliance -> Close |
+| `manual_review` | Medium-risk cases. | Triage -> Evidence -> Compliance -> Manual Review |
+| `deep_network_investigation` | High or critical cases. | Triage -> Federated Intelligence -> Network -> Evidence -> Compliance -> Supervisor Approval |
+| `campaign_escalation_replan` | Network finds a strong campaign cluster. | Triage -> Federated Intelligence -> Network -> Trace Cluster Funds -> Evidence -> Compliance -> Supervisor Approval |
+| `pause_for_more_data` | Required transaction data is missing. | Triage -> Request More Data -> Pause |
+
+The post-network replan is the important agentic behavior: if the Network Agent finds a clustered campaign pattern, the Case Manager inserts `trace_cluster_funds` before evidence writing and approval.
 
 ## Agent Fleet
 
 | Agent | Responsibility |
 | --- | --- |
-| Triage Agent | Scores suspicious activity and decides investigation priority. |
-| Network Agent | Runs related-transaction search only when selected by the plan, builds a live graph of shared entities, and detects fraud-campaign clusters when local network evidence corroborates federated signatures. |
-| Evidence Agent | Builds the evidence timeline from transaction records and internal policy. |
-| Compliance Agent | Checks PII exposure, access boundaries, policy conflicts, and tool safety. |
-| Case Manager Agent | Builds the initial and post-triage investigation plans, maintains case state, routes medium-risk cases to analyst review, pauses missing-data cases, and requests supervisor approval for high-risk actions. |
+| Case Manager Planning Agent | Creates the initial plan, replans after Triage, and can replan after Network campaign findings. |
+| Triage Agent | Scores suspicious activity, assigns priority, consumes federated intelligence, and calls Gemini through the backend model boundary. |
+| Network Agent | Searches related transactions, builds shared-entity graph data, and detects possible fraud campaigns. |
+| Campaign Trace Agent | Traces clustered fund movement after adaptive replanning. |
+| Evidence Agent | Builds chronological evidence from transaction records, policy context, federated signals, and campaign traces. |
+| Compliance Agent | Checks PII exposure, access boundaries, unsafe automation, policy conflicts, and tool safety. |
+| Case Manager Agent | Maintains case state and routes cases to manual review, supervisor approval, missing-data handling, or closure. |
 
-## Embedded Veritas Layer
+## Google ADK Runtime
 
-TraceLayer imports the useful Veritas concepts into `services/api/app/federation`:
+`AdkAgentRuntime` does more than create static agent definitions:
 
-| Module | Veritas Concept |
+1. Creates Google ADK `Agent` definitions for core fleet members.
+2. Builds a custom ADK `BaseAgent` wrapper for approved TraceLayer tools.
+3. Creates an ADK `InMemorySessionService` session with case, request, plan, risk, and tool state.
+4. Runs the wrapper through `google.adk.runners.Runner`.
+5. Records ADK execution metadata in each agent output, including execution mode, tool name, session id, runner class, event count, and fallback reason if ADK is unavailable.
+
+The actual fraud tool still runs behind the Agent Gateway, so authorization, guardrails, audit, and Cloud Logging remain enforced.
+
+## Embedded Veritas Federated Intelligence
+
+TraceLayer embeds selected privacy-preserving concepts from the Veritas project under `services/api/app/federation/`.
+
+| Module | Purpose |
 | --- | --- |
-| `secure_agg.py` | Bonawitz-style additive pairwise masking for secure sum. |
-| `dp.py` | Clip + Gaussian noise and RDP privacy accounting. |
-| `engine.py` | Federated fraud signal generation for the Triage Agent. |
+| `secure_agg.py` | Additive pairwise masking for secure aggregation. |
+| `dp.py` | Clipping, Gaussian noise, and privacy accounting. |
+| `engine.py` | Produces the federated fraud-risk signal consumed during Triage. |
 
-The local demo simulates three institutional nodes:
+The demo simulates three institutional participants:
 
-- `bank-na-01`
-- `insurer-claims-02`
-- `fintech-wallet-03`
+```text
+bank-na-01
+insurer-claims-02
+fintech-wallet-03
+```
 
-Each node produces a clipped and noised local update. TraceLayer securely aggregates those updates and stores only the aggregate signal, DP summary, campaign signature, and provenance hash in the investigation case.
+Each participant produces a clipped and noised local update. TraceLayer stores only privacy-safe derived information:
+
+```text
+Aggregate risk signal
+Differential privacy summary
+Campaign signature
+Provenance hash
+Contributor count
+```
+
+Raw customer and transaction records remain local.
+
+## Privacy Separation
+
+The dashboard separates federated intelligence from local evidence.
+
+| Federated Intelligence | Local Investigation Evidence |
+| --- | --- |
+| Aggregate risk score | Local transaction history |
+| Campaign signature | Shared devices and IP addresses |
+| Contributor count | Related local accounts |
+| Secure aggregation metadata | Counterparties |
+| Differential privacy summary | Local policy evidence |
+| Provenance hash | Evidence timeline |
+
+This lets an investigator understand why a case is risky without exposing another institution's underlying records.
+
+## Human-in-the-Loop Controls
+
+TraceLayer never performs final high-risk enforcement autonomously. It can recommend review or a hold, but the Case Manager creates a human approval request before consequential action.
+
+A reviewer can:
+
+```text
+Approve
+Deny
+Request More Evidence
+```
+
+When more evidence is requested, TraceLayer records the human feedback, reruns Evidence and Compliance, reevaluates through the Case Manager, and creates a new approval request.
+
+## Live Security Demo
+
+Use `Run Attack Demo` on the dashboard to trigger `tx-9701`.
+
+The malicious transaction memo attempts to override model instructions and request customer account data.
+
+Expected behavior:
+
+1. Triage detects prompt injection in the external memo.
+2. The unsafe memo is excluded from the Gemini prompt.
+3. PII exfiltration is denied.
+4. Investigation continues using structured transaction features.
+5. Guardrail findings are attached to the case.
+6. Cloud Logging receives structured trace entries for the agent run.
+
+`ModelArmorGuardrail` is TraceLayer's in-repo guardrail component. Do not describe it as a production Google Cloud Model Armor service integration unless that managed service is wired directly.
 
 ## Architecture
 
-TraceLayer is intentionally documented as several smaller flows instead of one oversized diagram. The key point is that the Case Manager creates and revises the investigation plan; the fleet does not blindly run every agent for every case.
+TraceLayer uses split diagrams so the core agent behavior is not hidden inside one oversized chart.
 
 ### System Boundary
 
@@ -159,35 +205,38 @@ flowchart LR
     Auth --> Gateway[Agent Gateway]
     Gateway --> Policy[Policy Engine]
     Gateway --> Registry[Agent Registry]
-    Gateway --> Armor[Model Armor Guardrail]
+    Gateway --> Guardrail[TraceLayer Guardrail Boundary]
     Gateway --> Planner[Case Manager Planner]
-    Planner --> Fleet[Selected Agent Handlers]
-    Fleet --> Gemini[Gemini through Vertex AI]
-    Fleet --> Firestore[Firestore Case and Job State]
-    Fleet --> BigQuery[BigQuery Network Search]
-    Fleet --> PubSub[Pub/Sub Investigation Topic]
-    Fleet --> Logging[Cloud Logging Trace Events]
-    Fleet --> Veritas[Embedded Veritas Federated Risk]
+    Planner --> ADK[Google ADK Runner and Session]
+    ADK --> Tools[Selected TraceLayer Tools]
+    Tools --> Gemini[Gemini via Vertex AI]
+    Tools --> Firestore[Firestore Case and Job State]
+    Tools --> BigQuery[BigQuery Network Search]
+    Tools --> PubSub[Pub/Sub Investigation Topic]
+    Tools --> Logging[Cloud Logging Trace Events]
+    Tools --> Veritas[Embedded Veritas Federation]
 ```
 
 ### Dynamic Investigation Planning
 
 ```mermaid
 flowchart TD
-    Start[Suspicious Transaction] --> InitialPlan[Case Manager creates initial triage-first plan]
-    InitialPlan --> Triage[Triage Agent scores local and federated risk]
-    Triage --> Replan[Case Manager replans from risk, missing data, and policy]
+    Start[Suspicious Transaction] --> InitialPlan[Case Manager creates triage-first plan]
+    InitialPlan --> Triage[Triage scores local and federated risk]
+    Triage --> Replan[Case Manager replans from risk, missing data, and thresholds]
     Replan --> Low{Low risk?}
     Replan --> Medium{Medium risk?}
     Replan --> High{High or critical?}
     Replan --> Missing{Missing required data?}
     Low --> LowPath[Triage -> Compliance -> Close]
-    Medium --> MediumPath[Triage -> Evidence -> Compliance -> Analyst Review]
+    Medium --> MediumPath[Triage -> Evidence -> Compliance -> Manual Review]
     High --> HighPath[Triage -> Federated Intelligence -> Network -> Evidence -> Compliance -> Human Approval]
-    Missing --> PausePath[Triage -> Request Additional Evidence -> Pause]
+    Missing --> PausePath[Triage -> Request More Data -> Pause]
+    HighPath --> CampaignFound{Network finds campaign cluster?}
+    CampaignFound --> CampaignPath[Adaptive Replan -> Trace Cluster Funds -> Evidence -> Compliance -> Human Approval]
 ```
 
-### Real Pub/Sub Worker Path
+### Async Pub/Sub Worker
 
 ```mermaid
 sequenceDiagram
@@ -198,12 +247,12 @@ sequenceDiagram
     participant Store as Firestore Job Store
 
     UI->>API: POST /cases/demo/async
-    API->>Store: create job queued
+    API->>Store: create queued job
     API->>PS: publish job_id
     API-->>UI: return job_id immediately
     PS->>Worker: authenticated push delivery
     Worker->>Store: mark running
-    Worker->>API: run investigation fleet
+    Worker->>Worker: run investigation fleet
     Worker->>Store: mark succeeded or failed
     UI->>API: poll /jobs/{job_id}
 ```
@@ -212,27 +261,41 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    Approval[Pending Approval] --> Decision{Supervisor decision}
-    Decision --> Approved[Approve hold recommendation]
-    Decision --> Denied[Deny action and keep audit trail]
-    Decision --> MoreEvidence[Request more evidence]
-    MoreEvidence --> Evidence[Evidence Agent reruns]
-    Evidence --> Compliance[Compliance Agent reruns]
-    Compliance --> Replan[Case Manager reevaluates]
-    Replan --> NewApproval[New approval request]
+    Pending[Pending Approval] --> Decision{Supervisor Decision}
+    Decision --> Approve[Approve Recommendation]
+    Decision --> Deny[Deny Action]
+    Decision --> More[Request More Evidence]
+    More --> Evidence[Evidence Agent Reruns]
+    Evidence --> Compliance[Compliance Agent Reruns]
+    Compliance --> Manager[Case Manager Reevaluates]
+    Manager --> NewApproval[New Approval Request]
 ```
 
 More detail is available in [docs/architecture.md](docs/architecture.md).
+
+## Demo Scenarios
+
+| Trigger | Expected Path | Scenario |
+| --- | --- | --- |
+| `tx-9301` | Low | Low-value domestic card alert. |
+| `tx-9401` | Medium | Cross-border ACH vendor payment routed to manual review. |
+| `tx-9501` | Medium | High-value domestic ACH with elevated federated risk. |
+| `tx-9201` | High | Small-business ACH case with amount, velocity, shared IP, and unusual-hour indicators. |
+| `tx-9601` | High | Cross-border wire requiring supervisor review. |
+| `tx-9001` | Critical / Campaign | High-value overseas wire with unusual timing and shared infrastructure. |
+| `tx-9101` | Critical / Campaign | High-value UAE wire with shared device, IP, and counterparty signals. |
+| `tx-9701` | Critical Security Demo | Prompt-injection attempt requesting customer account data. |
+| `tx-9801` | Missing Data | Incomplete ACH alert that causes the Case Manager to request additional data and pause. |
 
 ## Repository Layout
 
 ```text
 .
-├── apps/dashboard/          # Static demo dashboard
-├── data/                    # Mock transactions, customers, and policy data
-├── docs/                    # Architecture, demo script, and submission notes
-├── infra/                   # Cloud Run, Pub/Sub, BigQuery, Firestore, and IAM deployment assets
-└── services/api/            # FastAPI service and agent fleet implementation
+├── apps/dashboard/          # Static dashboard and admin console
+├── data/                    # Synthetic transactions, customers, policies, memory, reports, audit
+├── docs/                    # Architecture, demo script, roadmap, security, submission notes
+├── infra/                   # Cloud Run, Pub/Sub, BigQuery, Firestore, and IAM assets
+└── services/api/            # FastAPI backend and agent fleet
 ```
 
 ## Local Quickstart
@@ -246,55 +309,31 @@ cp ../../.env.example .env
 uvicorn app.main:app --reload --port 8080
 ```
 
-Open the API:
+Open:
 
 ```text
 http://localhost:8080/docs
-```
-
-Open local UI pages through the API server:
-
-```text
 http://localhost:8080/dashboard
 http://localhost:8080/admin
 ```
 
-Run the demo case:
+Run a randomized synchronous demo:
 
 ```bash
 curl -X POST http://localhost:8080/cases/demo
 ```
 
-Run with explicit role headers:
+Run a specific transaction:
 
 ```bash
-curl -X POST http://localhost:8080/cases/demo \
-  -H "X-Tracelayer-User: analyst@example.com" \
-  -H "X-Tracelayer-Role: supervisor"
-```
-
-Approve a high-risk case:
-
-```bash
-curl -X POST http://localhost:8080/cases/case-tx-9001/approval \
+curl -X POST http://localhost:8080/cases/investigate \
   -H "Content-Type: application/json" \
   -H "X-Tracelayer-User: supervisor@example.com" \
   -H "X-Tracelayer-Role: supervisor" \
-  -d '{
-    "approval_id": "appr-case-tx-9001",
-    "decision": "approved",
-    "reason": "Supervisor approved a temporary outbound transfer hold for demo."
-  }'
+  -d '{"transaction_id":"tx-9001"}'
 ```
 
-Verify the audit chain:
-
-```bash
-curl http://localhost:8080/audit/verify \
-  -H "X-Tracelayer-Role: compliance"
-```
-
-Run the local async demo flow:
+Run the local async fallback:
 
 ```bash
 JOB_ID=$(curl -s -X POST http://localhost:8080/cases/demo/async \
@@ -310,17 +349,35 @@ curl "http://localhost:8080/jobs/$JOB_ID" \
   -H "X-Tracelayer-Role: supervisor"
 ```
 
-The dashboard can call the local API if it is running. Otherwise, it falls back to an embedded demo case. To point the dashboard at a deployed backend, copy `apps/dashboard/config.example.js` to `apps/dashboard/config.js` and set only the backend URL:
+The manual `/jobs/{job_id}/run` call is for local development. In deployed Cloud Run mode, Pub/Sub push delivery invokes `/pubsub/investigations` automatically.
 
-```js
-window.TRACELAYER_API_BASE = "https://YOUR_CLOUD_RUN_URL";
+## Human Approval Example
+
+```bash
+curl -X POST http://localhost:8080/cases/case-tx-9001/approval \
+  -H "Content-Type: application/json" \
+  -H "X-Tracelayer-User: supervisor@example.com" \
+  -H "X-Tracelayer-Role: supervisor" \
+  -d '{
+    "approval_id": "appr-case-tx-9001",
+    "decision": "approved",
+    "reason": "Supervisor approved the proposed action."
+  }'
 ```
 
-Do not put Gemini, Google Cloud, or API keys in dashboard files.
+Request more evidence with the same endpoint:
+
+```json
+{
+  "approval_id": "appr-case-tx-9001",
+  "decision": "more_evidence",
+  "reason": "Need a refreshed timeline before deciding."
+}
+```
 
 ## Deployed Demo Access
 
-The deployed Cloud Run service is private. Use a local authenticated proxy:
+The Cloud Run service is private by design. Use an authenticated local proxy:
 
 ```bash
 gcloud run services proxy tracelayer-api \
@@ -342,96 +399,145 @@ Use the demo API key when the admin console asks for it:
 local-demo-key
 ```
 
-Expected demo path:
+## Cloud Logging Queries
 
-1. Open `/dashboard`.
-2. Click `Run Demo Case` for synchronous investigation.
-3. Click `Run Async Demo` to show queued job state and Pub/Sub worker completion.
-4. Review `Agent Registry` to show agent identity, permissions, and data access.
-5. Open `/admin`.
-6. Approve, deny, or request more evidence for pending cases.
-7. Return to `/dashboard` and confirm the approval status updates through browser live sync.
+Case-level query:
 
-## Google Cloud Mapping
+```text
+resource.type="cloud_run_revision"
+resource.labels.service_name="tracelayer-api"
+jsonPayload.case_id="CASE_ID"
+```
 
-| Capability | Local Development | Deployed Cloud Run Demo |
-| --- | --- | --- |
-| Runtime | FastAPI process with static dashboard routes | Private Cloud Run service behind authenticated proxy |
-| Agent framework boundary | Agent classes plus optional `AdkAgentRuntime` metadata | Google ADK `Agent` definitions bound for Triage, Network, and Case Manager |
-| Planner | Dynamic Case Manager planning in-process | Same planner, persisted output visible in the dashboard |
-| Transaction store | JSON fixtures in `data/` | Firestore, Cloud SQL, or BigQuery-ready data boundary |
-| Related transaction search | Local repository fallback | `BigQueryNetworkSearch` in `auto` mode with parameterized queries and fallback metadata |
-| Async work distribution | Local bus can enqueue and run `/jobs/{job_id}/run` manually | Pub/Sub push subscription invokes `/pubsub/investigations` automatically |
-| Memory bank | Local append-only JSONL snapshots | Firestore case, approval, policy, and job collections |
-| Model calls | Mock, Gemini API, or Vertex AI | Gemini through Vertex AI with service account credentials |
-| Guardrails | Model Armor-style prompt and PII guardrails | Same guardrails at the backend boundary before and after model calls |
-| Observability | Hash-chained audit ledger | Structured Cloud Logging trace events with case and agent fields |
-| Investigation UI | Static dashboard with fallback demo case | Live case sync, 3D graph, campaign detection, approval updates, and admin console |
+Agent-level query:
+
+```text
+resource.type="cloud_run_revision"
+resource.labels.service_name="tracelayer-api"
+jsonPayload.agent_id="triage-agent"
+jsonPayload.status="succeeded"
+```
+
+TraceLayer also maintains a local hash-chained audit ledger:
+
+```bash
+curl http://localhost:8080/audit/verify \
+  -H "X-Tracelayer-Role: compliance"
+```
 
 ## API Surface
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /runtime/config` | Returns safe runtime metadata without secrets. |
-| `GET /agents` | Lists registered agent identities, permissions, and data access classes. |
-| `POST /cases/demo` | Runs a randomized synchronous demo investigation. |
-| `POST /cases/demo/async` | Enqueues an async investigation job; uses Pub/Sub in deployed `PUBSUB_BACKEND=google` mode. |
-| `POST /pubsub/investigations` | Receives authenticated Pub/Sub push messages and runs queued investigation jobs. |
-| `POST /jobs/{job_id}/run` | Runs the worker step for a queued investigation job. |
-| `GET /jobs/{job_id}` | Reads async job status and generated case ID. |
-| `POST /cases/investigate` | Runs investigation for an explicit transaction ID. |
-| `GET /cases/{case_id}` | Reads a persisted case from the memory bank. |
-| `GET /approvals/pending` | Lists pending supervisor approval requests. |
-| `GET /approvals/log` | Lists pending, approved, denied, and more-evidence approval history. |
-| `GET /risk-policy` | Reads the active medium, high, and critical risk thresholds. |
-| `PUT /risk-policy` | Persists supervisor-updated risk thresholds for future investigations. |
-| `POST /cases/{case_id}/approval` | Accepts, denies, or requests more evidence for a human approval request. |
-| `GET /cases/{case_id}/audit` | Reads hash-chained audit events for a case. |
+| `GET /health` | Basic service health. |
+| `GET /runtime/config` | Safe runtime metadata without secrets, including ADK Runner availability. |
+| `GET /agents` | Registered agent identities, permissions, versions, and data classes. |
+| `POST /cases/demo` | Randomized synchronous demo investigation. |
+| `POST /cases/demo/async` | Queues an async investigation job. |
+| `POST /pubsub/investigations` | Receives authenticated Pub/Sub push jobs in deployed mode. |
+| `POST /jobs/{job_id}/run` | Manually runs a queued job for local development. |
+| `GET /jobs/{job_id}` | Reads async job status and generated case id. |
+| `POST /cases/investigate` | Runs an explicit transaction investigation. |
+| `GET /cases/{case_id}` | Reads a persisted case. |
+| `GET /approvals/pending` | Lists pending approval requests. |
+| `GET /approvals/log` | Lists approval history. |
+| `GET /risk-policy` | Reads active risk thresholds. |
+| `PUT /risk-policy` | Updates risk thresholds. |
+| `POST /cases/{case_id}/approval` | Approves, denies, or requests more evidence. |
+| `GET /cases/{case_id}/audit` | Reads audit events for a case. |
 | `GET /audit/verify` | Verifies the local audit chain. |
 
 ## Environment Variables
 
-See [.env.example](.env.example) for the local configuration template.
-
-Important values:
+See [.env.example](.env.example) for the full local template.
 
 | Variable | Purpose |
 | --- | --- |
-| `USE_MOCK_DATA` | Keeps the demo deterministic without cloud credentials. |
-| `AI_PROVIDER` | Selects `mock`, `gemini_api`, `vertex_ai`, or `auto` on the backend. |
-| `ADK_ENABLED` | Enables Google ADK agent definition binding for the core fleet. |
-| `ADK_MODEL` | Optional ADK model override; defaults to `GEMINI_MODEL`. |
-| `GEMINI_API_KEY` | Enables backend-only Gemini API calls in `gemini_api` mode. |
-| `GEMINI_MODEL` | Defaults to `gemini-2.5-flash`, a broadly available Vertex AI Flash model. |
-| `GOOGLE_CLOUD_PROJECT` | Project used by Cloud Run, Pub/Sub, BigQuery, and Firestore. |
-| `PUBSUB_BACKEND` | Selects `auto`, `local`, or `google` for async investigation work distribution. |
-| `PUBSUB_TOPIC_INVESTIGATIONS` | Pub/Sub topic used by queued investigation jobs. |
-| `PUBSUB_TOPIC_APPROVALS` | Pub/Sub topic used for approval-request events. |
-| `PUBSUB_PUSH_SUBSCRIPTION` | Name of the push subscription targeting `/pubsub/investigations`. |
-| `NETWORK_SEARCH_BACKEND` | Selects `auto`, `local`, or `bigquery` for related-transaction search. |
-| `BIGQUERY_TRANSACTIONS_TABLE` | Fully qualified BigQuery table for the Network Agent search path. |
-| `NETWORK_SEARCH_TIMEOUT_SECONDS` | Short BigQuery fallback timeout for demo-safe auto mode. |
-| `MEMORY_BACKEND` | Selects `local`, `firestore`, or `auto` case memory persistence. |
-| `FIRESTORE_DATABASE` | Firestore database ID for deployed case state. |
-| `FIRESTORE_CASE_COLLECTION` | Firestore collection for case records and snapshot history. |
-| `FIRESTORE_JOB_COLLECTION` | Firestore collection for async investigation job state. |
-| `FIRESTORE_POLICY_COLLECTION` | Firestore collection for active risk threshold policy. |
-| `RISK_POLICY_PATH` | Optional local JSON path for the active risk threshold policy. |
+| `APP_ENV` | Selects local or cloud behavior. |
+| `USE_MOCK_DATA` | Keeps demo data deterministic. |
+| `AI_PROVIDER` | Selects `mock`, `gemini_api`, `vertex_ai`, or `auto`. |
+| `GEMINI_API_KEY` | Enables backend-only Gemini API mode. |
+| `GEMINI_MODEL` | Defaults to `gemini-2.5-flash`. |
+| `GOOGLE_CLOUD_PROJECT` | Project for Cloud Run, Vertex AI, Firestore, Pub/Sub, and BigQuery. |
+| `GOOGLE_CLOUD_LOCATION` | Vertex AI region. |
+| `ADK_ENABLED` | Enables Google ADK definitions and Runner-backed tool execution. |
+| `ADK_MODEL` | Optional ADK model override. |
+| `MEMORY_BACKEND` | Selects `local`, `firestore`, or `auto`. |
+| `FIRESTORE_CASE_COLLECTION` | Firestore collection for case records. |
+| `FIRESTORE_JOB_COLLECTION` | Firestore collection for async jobs. |
+| `FIRESTORE_POLICY_COLLECTION` | Firestore collection for risk policy. |
+| `NETWORK_SEARCH_BACKEND` | Selects `local`, `bigquery`, or `auto`. |
+| `BIGQUERY_TRANSACTIONS_TABLE` | Fully qualified BigQuery transaction table. |
+| `PUBSUB_BACKEND` | Selects `local`, `google`, or `auto`. |
+| `PUBSUB_TOPIC_INVESTIGATIONS` | Pub/Sub topic for investigation jobs. |
+| `PUBSUB_TOPIC_APPROVALS` | Pub/Sub topic for approval events. |
+| `PUBSUB_PUSH_SUBSCRIPTION` | Push subscription targeting `/pubsub/investigations`. |
 | `SECURITY_MODE` | Use `permissive` locally and `enforcing` for deployed API-key checks. |
+| `DEMO_ANALYST_API_KEY` | Demo API key checked in enforcing mode. |
 | `AUDIT_LEDGER_PATH` | Local hash-chained audit log path. |
 | `MEMORY_BANK_PATH` | Local append-only case memory path. |
-| `INVESTIGATION_JOB_PATH` | Local append-only async job state path. |
+| `INVESTIGATION_JOB_PATH` | Local async job store path. |
+| `RISK_POLICY_PATH` | Optional local risk policy path. |
 
-## Development Commands
+## Implemented, Fallback, and Hardening
+
+### Implemented
+
+```text
+Cloud Run backend
+Vertex AI Gemini backend boundary
+Google ADK Runner-backed core tool execution
+Dynamic post-triage and post-network planning
+Campaign trace follow-up action
+Firestore case, job, approval, and policy persistence
+Pub/Sub publisher and authenticated push worker
+BigQuery-aware network search
+Human approval and request-more-evidence loop
+Embedded Veritas federated risk
+Interactive 3D network graph
+Fraud campaign detection
+Structured Cloud Logging
+Hash-chained audit ledger
+Agent Registry UI
+Risk threshold store
+Prompt-injection live demo
+```
+
+### Local Fallbacks
+
+```text
+Mock model provider
+Local JSON transaction repository
+Local Pub/Sub bus
+Local append-only memory
+Local investigation job store
+Local risk policy store
+Local BigQuery search fallback
+Python fallback if ADK Runner is unavailable
+```
+
+### Production Hardening
+
+```text
+Move demo API key material to Secret Manager
+Add Pub/Sub dead-letter topics and retry tuning
+Tighten Firestore rules and per-agent IAM bindings
+Export audit events to BigQuery with retention policy
+Add load and failure-mode tests for async investigations
+Add downloadable PDF case reports
+Wire managed Google Cloud Model Armor directly if required
+Expand OpenTelemetry trace propagation
+```
+
+## Development
 
 ```bash
 cd services/api
 pytest
 python -m compileall app
-python -c "from app.config import Settings; from app.fleet import FraudInvestigationFleet; print(FraudInvestigationFleet(Settings()).investigate('tx-9001').case_id)"
 ```
 
-Or from the repository root:
+From the repository root:
 
 ```bash
 make verify-core
@@ -440,47 +546,21 @@ make test
 make run-api
 ```
 
-## Submission Checklist
+## Submission Notes
 
 The hackathon submission should include:
 
 1. Hosted project URL or recorded local demo.
 2. Code repository URL.
-3. Architecture diagrams from `README.md`, `docs/architecture.md`, and `docs/architecture.mmd`.
-4. Four-minute demo video showing Cloud Run or Google Cloud evidence.
-5. Short write-up covering problem, value proposition, features, technologies, and learnings.
+3. Architecture diagrams from this README and `docs/architecture.md`.
+4. Four-minute demo video showing Cloud Run, Pub/Sub, Firestore, Vertex AI mode, Cloud Logging trace queries, the dashboard, and the admin console.
+5. Short write-up covering the problem, value proposition, features, technologies, and learnings.
 
-See [docs/submission-checklist.md](docs/submission-checklist.md) for a more detailed checklist.
+Helpful docs:
 
-## Security Documentation
-
+- [docs/architecture.md](docs/architecture.md)
+- [docs/demo-script.md](docs/demo-script.md)
+- [docs/roadmap.md](docs/roadmap.md)
 - [docs/security/threat-model.md](docs/security/threat-model.md)
 - [docs/security/controls.md](docs/security/controls.md)
-- [infra/iam/least-privilege.md](infra/iam/least-privilege.md)
-
-## Backend-only AI Providers
-
-Use one of these backend modes:
-
-```env
-AI_PROVIDER=mock
-```
-
-```env
-AI_PROVIDER=gemini_api
-GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-2.5-flash
-```
-
-```env
-AI_PROVIDER=vertex_ai
-GOOGLE_CLOUD_PROJECT=project-6ecbea1e-e0c3-4325-a63
-GOOGLE_CLOUD_LOCATION=us-central1
-GEMINI_MODEL=gemini-2.5-flash
-```
-
-The dashboard never receives these secrets. It only calls `/cases/demo`, `/cases/investigate`, and `/runtime/config` on the backend.
-
-For the local async fallback, the dashboard can call `/cases/demo/async`, invoke `/jobs/{job_id}/run`, and poll `/jobs/{job_id}` until the job returns a `case_id`. In the deployed Cloud Run path, `/cases/demo/async` publishes to Pub/Sub and the authenticated push subscription calls `/pubsub/investigations` automatically; job state is persisted through Firestore when `MEMORY_BACKEND=firestore`.
-
-The admin console calls `/approvals/pending`, `/cases/{case_id}`, and `/cases/{case_id}/approval` with supervisor headers. In deployed enforcing mode, enter the demo API key in the admin console or send it through a trusted internal gateway.
+- [infra/cloudrun/README.md](infra/cloudrun/README.md)

@@ -1,6 +1,6 @@
 # TraceLayer Architecture
 
-TraceLayer is an enterprise fraud investigation agent fleet. It uses specialized agents, but the important orchestration behavior is not a fixed pipeline: the Case Manager creates an investigation plan, the Triage Agent produces risk and federated intelligence, and the Case Manager replans before selecting the next handlers.
+TraceLayer is an enterprise fraud investigation agent fleet. It uses specialized agents, but the important orchestration behavior is not a fixed pipeline: the Case Manager creates an investigation plan, the Triage Agent produces risk and federated intelligence, and the Case Manager replans before selecting the next handlers. Core agent execution is wrapped by Google ADK Runner sessions, so the system can show ADK orchestration metadata instead of only static agent definitions.
 
 ## System Goals
 
@@ -21,8 +21,8 @@ flowchart LR
     Gateway --> Policy[Policy Engine]
     Gateway --> Armor[Model Armor Guardrail]
     Gateway --> Planner[Case Manager Planner]
-    Planner --> Fleet[Selected Agent Handlers]
-    Fleet --> ADK[Google ADK Agent Definitions]
+    Planner --> ADK[Google ADK Runner and In-Memory Session]
+    ADK --> Fleet[Selected Agent Tools]
     Fleet --> Vertex[Gemini via Vertex AI]
     Fleet --> Firestore[Firestore Case, Job, Approval, and Policy State]
     Fleet --> BigQuery[BigQuery Related Transaction Search]
@@ -42,6 +42,8 @@ flowchart TD
     PlanB --> Medium[Medium: Triage -> Evidence -> Compliance -> Analyst Review]
     PlanB --> High[High or Critical: Triage -> Federated Intelligence -> Network -> Evidence -> Compliance -> Human Approval]
     PlanB --> Missing[Missing Data: Triage -> Request Additional Evidence -> Pause]
+    High --> NetworkFinding{Network finds campaign cluster?}
+    NetworkFinding --> Campaign[Adaptive replan: Trace Cluster Funds -> Evidence -> Compliance -> Human Approval]
 ```
 
 The dashboard renders the selected `Agent-generated Investigation Plan` so the demo shows why a low-risk card alert does not run the same workflow as a critical overseas wire transfer.
@@ -55,18 +57,20 @@ The dashboard renders the selected `Agent-generated Investigation Plan` so the d
 5. `AgentGateway` authorizes the selected agent before each run and records audit events.
 6. `TriageAgent` scores the transaction, calls the federated risk engine, and asks Gemini for an explanation through the backend-only AI boundary.
 7. `CaseManagerPlanningAgent` replans using actual risk, missing data, policy thresholds, and federated signals.
-8. The fleet executes only the selected handlers: Network, Evidence, Compliance, approval request, pause, or close.
-9. `MemoryBank` or `FirestoreMemoryBank` persists the case snapshot, approval state, and audit-visible output.
-10. The dashboard receives live updates and renders the 3D network graph, fraud campaign detection, guardrail findings, and approval state.
+8. `AdkAgentRuntime` wraps approved Triage, Network, and Case Manager tool execution in a Google ADK `Runner` and `InMemorySessionService`.
+9. The fleet executes only the selected handlers: Network, Evidence, Compliance, approval request, pause, or close.
+10. If Network detects a strong campaign cluster, the Case Manager replans again and adds `trace_cluster_funds` before evidence and compliance.
+11. `MemoryBank` or `FirestoreMemoryBank` persists the case snapshot, approval state, and audit-visible output.
+12. The dashboard receives live updates and renders the 3D network graph, fraud campaign detection, guardrail findings, ADK Runner metadata, and approval state.
 
 ## Enterprise Fleet Concepts
 
 | Concept | TraceLayer Implementation |
 | --- | --- |
 | Agent Identity | `AgentRegistry` declares names, versions, service identities, permissions, and data access classes. |
-| Google ADK Boundary | `AdkAgentRuntime` binds Triage, Network, and Case Manager to real `google.adk` `Agent` definitions when the dependency is available. |
+| Google ADK Boundary | `AdkAgentRuntime` binds Triage, Network, and Case Manager to real `google.adk` `Agent` definitions and wraps approved tool calls with `google.adk.runners.Runner` sessions when the dependency is available. |
 | Agent Gateway | `AgentGateway` checks each agent's permissions, applies guardrails, measures latency, and emits audit events. |
-| Dynamic Planner | `CaseManagerPlanningAgent` generates and revises the investigation plan instead of relying on a hard-coded all-agent sequence. |
+| Dynamic Planner | `CaseManagerPlanningAgent` generates and revises the investigation plan after triage and can replan again after Network discovers campaign clusters. |
 | Memory Bank | `MemoryBank` writes local append-only snapshots; `FirestoreMemoryBank` persists deployed cases, approvals, jobs, and threshold policy. |
 | Model Armor | `ModelArmorGuardrail` detects prompt injection, redacts PII-like values, and blocks unsafe external instructions from model prompts. |
 | Federated Intelligence | `VeritasFederatedRiskEngine` embeds secure aggregation, differential privacy accounting, campaign signatures, and provenance hashing. |

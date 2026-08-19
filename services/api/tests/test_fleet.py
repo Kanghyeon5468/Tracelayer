@@ -190,17 +190,18 @@ def test_case_manager_plans_low_risk_lightweight_review(tmp_path: Path) -> None:
     assert case.status == "closed"
 
 
-def test_case_manager_plans_high_risk_deep_network_investigation(tmp_path: Path) -> None:
+def test_case_manager_adaptively_replans_high_risk_campaign_cluster(tmp_path: Path) -> None:
     fleet = _test_fleet(tmp_path)
 
     case = fleet.investigate("tx-9001", create_case_run=True)
 
     assert case.investigation_plan is not None
-    assert case.investigation_plan.strategy == "deep_network_investigation"
+    assert case.investigation_plan.strategy == "campaign_escalation_replan"
     assert [step.action for step in case.investigation_plan.steps] == [
         "score_transaction",
         "compute_federated_intelligence",
         "search_related_transactions",
+        "trace_cluster_funds",
         "build_evidence_timeline",
         "check_policy_and_pii",
         "request_supervisor_approval",
@@ -209,6 +210,20 @@ def test_case_manager_plans_high_risk_deep_network_investigation(tmp_path: Path)
     assert len(case.network_links) >= 1
     assert len(case.evidence_timeline) >= 1
     assert case.approval_request is not None
+    assert any(
+        output.data.get("trace_action") == "trace_cluster_funds"
+        for output in case.agent_outputs
+    )
+    assert any(
+        output.data.get("plan_phase") == "post_triage_replan"
+        for output in case.agent_outputs
+        if output.agent_id == "case-manager-agent"
+    )
+    assert any(
+        output.data.get("strategy") == "campaign_escalation_replan"
+        for output in case.agent_outputs
+        if output.agent_id == "case-manager-agent"
+    )
 
 
 def test_case_manager_pauses_when_trigger_data_is_missing(tmp_path: Path) -> None:
@@ -322,6 +337,33 @@ def test_core_agents_record_google_adk_runtime_metadata(tmp_path: Path) -> None:
         assert runtime["enabled"] is True
         assert runtime["framework"] == "google_adk"
         assert runtime["model"] == "gemini-2.5-flash" or runtime["available"] is False
+        assert runtime["tool_invoked"] is True
+        assert runtime["execution_mode"] in {"adk_runner", "python_fallback"}
+
+
+def test_google_adk_runner_executes_core_agent_tools(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    case = fleet.investigate("tx-9001")
+    runner_outputs = [
+        output
+        for output in case.agent_outputs
+        if output.agent_id in {"triage-agent", "network-agent", "case-manager-agent"}
+    ]
+
+    assert runner_outputs
+    assert all(
+        output.data["adk_runtime"]["execution_mode"] == "adk_runner"
+        for output in runner_outputs
+    )
+    assert all(
+        output.data["adk_execution"]["mode"] == "adk_runner"
+        for output in runner_outputs
+    )
+    assert any(
+        output.data["adk_execution"]["tool_name"] == "CampaignTraceAgent"
+        for output in runner_outputs
+    )
 
 
 def test_async_demo_job_persists_status_and_case_id(tmp_path: Path) -> None:

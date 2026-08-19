@@ -178,6 +178,64 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
                 ],
             )
 
+        if self._network_campaign_requires_replan(context):
+            return InvestigationPlan(
+                plan_id=f"plan-{context.case_id}-campaign-escalation",
+                strategy="campaign_escalation_replan",
+                rationale=(
+                    "The Network Agent found a clustered campaign pattern after the "
+                    "post-triage plan. The Case Manager adds a focused fund-tracing "
+                    "step before evidence, compliance, and approval."
+                ),
+                steps=[
+                    completed_triage,
+                    InvestigationPlanStep(
+                        step_id="federated-intelligence",
+                        agent_id="triage-agent",
+                        action="compute_federated_intelligence",
+                        reason=(
+                            "Use the privacy-preserving Veritas signal already computed "
+                            "during triage before selecting network depth."
+                        ),
+                        status=PlanStepStatus.COMPLETED,
+                    ),
+                    InvestigationPlanStep(
+                        step_id="network",
+                        agent_id="network-agent",
+                        action="search_related_transactions",
+                        reason="Network discovery already found a campaign cluster.",
+                        status=PlanStepStatus.COMPLETED,
+                    ),
+                    InvestigationPlanStep(
+                        step_id="trace-cluster-funds",
+                        agent_id="network-agent",
+                        action="trace_cluster_funds",
+                        reason=(
+                            "Trace clustered fund movement and counterparties before "
+                            "writing the evidence timeline."
+                        ),
+                    ),
+                    InvestigationPlanStep(
+                        step_id="evidence",
+                        agent_id="evidence-agent",
+                        action="build_evidence_timeline",
+                        reason="Build a timeline from trigger, network, campaign, and federated evidence.",
+                    ),
+                    InvestigationPlanStep(
+                        step_id="compliance",
+                        agent_id="compliance-agent",
+                        action="check_policy_and_pii",
+                        reason="Check PII exposure and enforcement policy boundaries.",
+                    ),
+                    InvestigationPlanStep(
+                        step_id="approval",
+                        agent_id="case-manager-agent",
+                        action="request_supervisor_approval",
+                        reason="Require supervisor approval before any outbound hold.",
+                    ),
+                ],
+            )
+
         completed_federated_intelligence = InvestigationPlanStep(
             step_id="federated-intelligence",
             agent_id="triage-agent",
@@ -233,6 +291,40 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
     @staticmethod
     def _triage_was_completed(context: InvestigationContext) -> bool:
         return any(output.agent_id == "triage-agent" for output in context.agent_outputs)
+
+    @staticmethod
+    def _network_campaign_requires_replan(context: InvestigationContext) -> bool:
+        if not context.investigation_plan:
+            return False
+        if context.investigation_plan.strategy == "campaign_escalation_replan":
+            return False
+        if any(
+            output.data.get("trace_action") == "trace_cluster_funds"
+            for output in context.agent_outputs
+        ):
+            return False
+
+        network_output = next(
+            (
+                output
+                for output in reversed(context.agent_outputs)
+                if output.agent_id == "network-agent"
+                and output.data.get("campaign_detection")
+            ),
+            None,
+        )
+        if not network_output:
+            return False
+
+        campaign = network_output.data.get("campaign_detection") or {}
+        return bool(
+            campaign.get("detected")
+            and (
+                campaign.get("severity") in {"high", "critical"}
+                or campaign.get("network_link_count", 0) >= 6
+                or campaign.get("linked_transaction_count", 0) >= 4
+            )
+        )
 
 
 class CaseManagerAgent(BaseInvestigationAgent):

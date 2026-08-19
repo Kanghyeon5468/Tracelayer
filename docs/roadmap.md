@@ -1,17 +1,17 @@
 # Build Status and Roadmap
 
-TraceLayer has moved beyond the initial prototype. The current repository contains a runnable Cloud Run-oriented demo with dynamic agent planning, backend-only Gemini calls, Google ADK agent definitions, Firestore persistence, Pub/Sub push workers, supervisor approval, 3D network visualization, campaign detection, guardrails, and structured Cloud Logging traces.
+TraceLayer has moved beyond the initial prototype. The current repository contains a runnable Cloud Run-oriented demo with dynamic agent planning, backend-only Gemini calls, Google ADK Runner-backed tool execution, Firestore persistence, Pub/Sub push workers, supervisor approval, 3D network visualization, campaign detection, guardrails, and structured Cloud Logging traces.
 
 ## Implemented Demo Depth
 
 | Area | Current Status |
 | --- | --- |
 | Secure runtime | Agent Gateway, policy engine, API-key enforcement, role-scoped request context, guardrails, memory bank, and audit ledger are implemented. |
-| Dynamic orchestration | Case Manager creates an initial triage-first plan, replans after Triage, and executes only selected handlers. |
+| Dynamic orchestration | Case Manager creates an initial triage-first plan, replans after Triage, and can replan again after Network detects a campaign cluster. |
 | Google Cloud deployment | Cloud Run deployment assets, Cloud Build config, Pub/Sub push setup, Firestore state, BigQuery search boundary, and Vertex AI mode are present. |
-| Google ADK | Triage, Network, and Case Manager bind to real Google ADK `Agent` definitions when `google-adk` is installed. |
+| Google ADK | Triage, Network, and Case Manager run approved tools through real Google ADK `Runner` sessions when `google-adk` is installed. |
 | Federated intelligence | Veritas-inspired secure aggregation, differential privacy accounting, campaign signature, and provenance hash are embedded in-process. |
-| Investigation UX | Dashboard shows the generated plan, agent findings, privacy-separated federated signal, 3D network graph, campaign detection, compliance findings, live approval state, async job status, and Agent Registry. |
+| Investigation UX | Dashboard shows the generated plan, ADK Runner session metadata, agent findings, privacy-separated federated signal, 3D network graph, campaign detection, compliance findings, live approval state, async job status, and Agent Registry. |
 | Admin UX | Supervisor page lists pending approvals and approval history, supports accept, deny, request more evidence, and saves risk thresholds. |
 | Human feedback | Requesting more evidence reruns Evidence, Compliance, and Case Manager, then creates a new approval request. |
 | Security demo | Prompt injection scenario `tx-9701` is blocked by the guardrail while the investigation continues from structured fields. |
