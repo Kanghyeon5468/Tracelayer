@@ -135,34 +135,52 @@ class FraudInvestigationFleet:
         policy_text = self.repository.read_policy_text()
         risk_policy = self.risk_policy_store.load_policy()
         network_search = BigQueryNetworkSearch(self.settings, self.repository)
-        agent_by_id = {
-            "triage-agent": TriageAgent(
+        planned_action_handlers = {
+            "score_transaction": TriageAgent(
                 self.registry.get("triage-agent"),
                 self.reasoner,
                 self.federated_engine,
                 risk_policy,
                 self.adk_runtime,
             ),
-            "network-agent": NetworkAgent(
+            "search_related_transactions": NetworkAgent(
                 self.registry.get("network-agent"),
                 network_search,
                 self.adk_runtime,
             ),
-            "evidence-agent": EvidenceAgent(self.registry.get("evidence-agent"), policy_text),
-            "compliance-agent": ComplianceAgent(self.registry.get("compliance-agent")),
-            "case-manager-agent": CaseManagerAgent(
-                self.registry.get("case-manager-agent"),
-                self.adk_runtime,
+            "build_evidence_timeline": EvidenceAgent(
+                self.registry.get("evidence-agent"),
+                policy_text,
             ),
+            "check_policy_and_pii": ComplianceAgent(self.registry.get("compliance-agent")),
         }
+        case_manager_agent = CaseManagerAgent(
+            self.registry.get("case-manager-agent"),
+            self.adk_runtime,
+        )
+        planned_action_handlers.update(
+            {
+                "request_manual_review": case_manager_agent,
+                "request_supervisor_approval": case_manager_agent,
+                "request_more_data": case_manager_agent,
+                "pause_case": case_manager_agent,
+                "close_case": case_manager_agent,
+            }
+        )
+        planning_agent = CaseManagerPlanningAgent(
+            self.registry.get("case-manager-agent"),
+            self.adk_runtime,
+        )
 
-        self.gateway.run_agent(agent_by_id["triage-agent"], context, request)
-        self.gateway.run_agent(
-            CaseManagerPlanningAgent(self.registry.get("case-manager-agent"), self.adk_runtime),
+        self.gateway.run_agent(planning_agent, context, request)
+        self._execute_investigation_plan(
+            planned_action_handlers,
             context,
             request,
+            allowed_actions={"score_transaction"},
         )
-        self._execute_investigation_plan(agent_by_id, context, request)
+        self.gateway.run_agent(planning_agent, context, request)
+        self._execute_investigation_plan(planned_action_handlers, context, request)
 
         case = InvestigationCase(
             case_id=context.case_id,
@@ -231,17 +249,20 @@ class FraudInvestigationFleet:
 
     def _execute_investigation_plan(
         self,
-        agent_by_id: dict[str, object],
+        planned_action_handlers: dict[str, object],
         context: InvestigationContext,
         request: RequestContext,
+        allowed_actions: set[str] | None = None,
     ) -> None:
         if not context.investigation_plan:
             raise ValueError("Case Manager did not produce an investigation plan.")
 
         for step in context.investigation_plan.steps:
+            if allowed_actions is not None and step.action not in allowed_actions:
+                continue
             if step.status != PlanStepStatus.PLANNED:
                 continue
-            agent = agent_by_id.get(step.agent_id)
+            agent = planned_action_handlers.get(step.action)
             if not agent:
                 step.status = PlanStepStatus.SKIPPED
                 continue

@@ -70,6 +70,7 @@ def test_random_demo_uses_flagged_demo_transactions(tmp_path: Path, monkeypatch)
         "tx-9501",
         "tx-9601",
         "tx-9701",
+        "tx-9801",
     }.issubset(set(demo_ids))
 
     monkeypatch.setattr(fleet_module.random, "choice", lambda values: "tx-9201")
@@ -108,9 +109,19 @@ def test_random_demo_avoids_recent_demo_repeats(tmp_path: Path, monkeypatch) -> 
             "tx-9501",
             "tx-9601",
             "tx-9701",
+            "tx-9801",
         ],
-        ["tx-9101", "tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601", "tx-9701"],
-        ["tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601", "tx-9701"],
+        [
+            "tx-9101",
+            "tx-9201",
+            "tx-9301",
+            "tx-9401",
+            "tx-9501",
+            "tx-9601",
+            "tx-9701",
+            "tx-9801",
+        ],
+        ["tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601", "tx-9701", "tx-9801"],
     ]
 
 
@@ -129,6 +140,7 @@ def test_demo_scenarios_cover_risk_priority_range(tmp_path: Path) -> None:
     assert results["tx-9501"].priority == "medium"
     assert results["tx-9601"].priority == "high"
     assert results["tx-9301"].approval_request is None
+    assert results["tx-9801"].investigation_plan.strategy == "pause_for_more_data"
     assert results["tx-9401"].approval_request is not None
     assert results["tx-9401"].approval_request.action == "manual_case_review"
     assert results["tx-9501"].approval_request is not None
@@ -162,10 +174,10 @@ def test_case_manager_plans_low_risk_lightweight_review(tmp_path: Path) -> None:
 
     assert case.investigation_plan is not None
     assert case.investigation_plan.strategy == "lightweight_review"
-    assert [step.agent_id for step in case.investigation_plan.steps] == [
-        "triage-agent",
-        "compliance-agent",
-        "case-manager-agent",
+    assert [step.action for step in case.investigation_plan.steps] == [
+        "score_transaction",
+        "check_policy_and_pii",
+        "close_case",
     ]
     assert all(step.status == "completed" for step in case.investigation_plan.steps)
     assert {output.agent_id for output in case.agent_outputs} == {
@@ -175,7 +187,7 @@ def test_case_manager_plans_low_risk_lightweight_review(tmp_path: Path) -> None:
     }
     assert case.network_links == []
     assert case.evidence_timeline == []
-    assert case.status == "open"
+    assert case.status == "closed"
 
 
 def test_case_manager_plans_high_risk_deep_network_investigation(tmp_path: Path) -> None:
@@ -185,17 +197,52 @@ def test_case_manager_plans_high_risk_deep_network_investigation(tmp_path: Path)
 
     assert case.investigation_plan is not None
     assert case.investigation_plan.strategy == "deep_network_investigation"
-    assert [step.agent_id for step in case.investigation_plan.steps] == [
-        "triage-agent",
-        "network-agent",
-        "evidence-agent",
-        "compliance-agent",
-        "case-manager-agent",
+    assert [step.action for step in case.investigation_plan.steps] == [
+        "score_transaction",
+        "compute_federated_intelligence",
+        "search_related_transactions",
+        "build_evidence_timeline",
+        "check_policy_and_pii",
+        "request_supervisor_approval",
     ]
     assert all(step.status == "completed" for step in case.investigation_plan.steps)
     assert len(case.network_links) >= 1
     assert len(case.evidence_timeline) >= 1
     assert case.approval_request is not None
+
+
+def test_case_manager_pauses_when_trigger_data_is_missing(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    case = fleet.investigate("tx-9801", create_case_run=True)
+
+    assert case.investigation_plan is not None
+    assert case.investigation_plan.strategy == "pause_for_more_data"
+    assert [step.action for step in case.investigation_plan.steps] == [
+        "score_transaction",
+        "request_more_data",
+        "pause_case",
+    ]
+    assert all(step.status == "completed" for step in case.investigation_plan.steps)
+    assert case.status == "open"
+    assert case.approval_request is None
+    assert case.network_links == []
+    assert case.evidence_timeline == []
+
+
+def test_case_manager_generates_initial_plan_before_triage(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    case = fleet.investigate("tx-9001", create_case_run=True)
+
+    assert case.agent_outputs[0].agent_id == "case-manager-agent"
+    assert case.agent_outputs[0].data["plan_phase"] == "initial_plan"
+    assert case.agent_outputs[1].agent_id == "triage-agent"
+    assert any(
+        output.data.get("plan_phase") == "post_triage_replan"
+        for output in case.agent_outputs
+        if output.agent_id == "case-manager-agent"
+    )
 
 
 def test_supervisor_can_store_risk_threshold_policy(tmp_path: Path) -> None:

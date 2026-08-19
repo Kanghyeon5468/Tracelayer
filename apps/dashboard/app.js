@@ -316,6 +316,7 @@ const renderCase = (caseData) => {
       <div class="item">
         <strong>${titleCase(plan.strategy)}</strong>
         <p>${plan.rationale}</p>
+        <p>Created by ${titleCase(plan.created_by_agent_id)} after adaptive case review.</p>
       </div>
       ${plan.steps
         .map(

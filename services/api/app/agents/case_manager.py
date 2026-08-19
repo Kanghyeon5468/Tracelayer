@@ -29,18 +29,23 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
     def run(self, context: InvestigationContext) -> AgentOutput:
         plan = self._build_plan(context)
         context.investigation_plan = plan
+        plan_phase = (
+            "post_triage_replan" if self._triage_was_completed(context) else "initial_plan"
+        )
 
         output = AgentOutput(
             agent_id=self.identity.agent_id,
             summary=(
-                f"Created {plan.strategy} investigation plan with "
+                f"Created {plan.strategy} {plan_phase.replace('_', ' ')} with "
                 f"{len(plan.steps)} steps. {plan.rationale}"
             ),
             confidence=0.9,
             data={
                 "planning_action": "dynamic_investigation_plan",
+                "plan_phase": plan_phase,
                 "strategy": plan.strategy,
                 "planned_agents": [step.agent_id for step in plan.steps],
+                "planned_actions": [step.action for step in plan.steps],
                 "step_count": len(plan.steps),
                 "adk_runtime": self._adk_binding(),
             },
@@ -62,6 +67,31 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
         ).as_dict()
 
     def _build_plan(self, context: InvestigationContext) -> InvestigationPlan:
+        if not self._triage_was_completed(context):
+            return InvestigationPlan(
+                plan_id=f"plan-{context.case_id}-initial",
+                strategy="triage_first_routing",
+                rationale=(
+                    "The Case Manager starts the case by asking Triage to score the "
+                    "transaction, then replans after risk, federated signal, and missing-data "
+                    "state are known."
+                ),
+                steps=[
+                    InvestigationPlanStep(
+                        step_id="triage",
+                        agent_id="triage-agent",
+                        action="score_transaction",
+                        reason="Score the transaction before selecting deeper investigation agents.",
+                    ),
+                    InvestigationPlanStep(
+                        step_id="adaptive-replan",
+                        agent_id="case-manager-agent",
+                        action="replan_after_triage",
+                        reason="Use triage output to choose the remaining agent path.",
+                    ),
+                ],
+            )
+
         completed_triage = InvestigationPlanStep(
             step_id="triage",
             agent_id="triage-agent",
@@ -86,6 +116,12 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
                         action="request_more_data",
                         reason="Ask an analyst or upstream system for additional records.",
                     ),
+                    InvestigationPlanStep(
+                        step_id="pause",
+                        agent_id="case-manager-agent",
+                        action="pause_case",
+                        reason="Pause the investigation until additional evidence is supplied.",
+                    ),
                 ],
             )
 
@@ -93,20 +129,20 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             return InvestigationPlan(
                 plan_id=f"plan-{context.case_id}",
                 strategy="lightweight_review",
-                rationale="Low-risk cases only need compliance checks before staying open.",
+                rationale="Low-risk cases only need compliance checks before closure.",
                 steps=[
                     completed_triage,
                     InvestigationPlanStep(
                         step_id="compliance",
                         agent_id="compliance-agent",
                         action="check_policy_and_pii",
-                        reason="Confirm the low-risk case can remain in analyst review.",
+                        reason="Confirm the low-risk case can be closed without deeper discovery.",
                     ),
                     InvestigationPlanStep(
-                        step_id="finish",
+                        step_id="close",
                         agent_id="case-manager-agent",
-                        action="finish_case",
-                        reason="Record the final case state without requesting approval.",
+                        action="close_case",
+                        reason="Close the case without requesting human approval.",
                     ),
                 ],
             )
@@ -142,6 +178,17 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
                 ],
             )
 
+        completed_federated_intelligence = InvestigationPlanStep(
+            step_id="federated-intelligence",
+            agent_id="triage-agent",
+            action="compute_federated_intelligence",
+            reason=(
+                "Use the privacy-preserving Veritas signal already computed during "
+                "triage before selecting network depth."
+            ),
+            status=PlanStepStatus.COMPLETED,
+        )
+
         return InvestigationPlan(
             plan_id=f"plan-{context.case_id}",
             strategy="deep_network_investigation",
@@ -151,6 +198,7 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             ),
             steps=[
                 completed_triage,
+                completed_federated_intelligence,
                 InvestigationPlanStep(
                     step_id="network",
                     agent_id="network-agent",
@@ -182,6 +230,10 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
     def _requires_more_data(context: InvestigationContext) -> bool:
         return "missing_data" in context.trigger_transaction.risk_flags
 
+    @staticmethod
+    def _triage_was_completed(context: InvestigationContext) -> bool:
+        return any(output.agent_id == "triage-agent" for output in context.agent_outputs)
+
 
 class CaseManagerAgent(BaseInvestigationAgent):
     required_permissions = ["case.write", "approvals.request", "reports.write"]
@@ -207,6 +259,13 @@ class CaseManagerAgent(BaseInvestigationAgent):
 
         if summary:
             pass
+        elif (
+            context.investigation_plan
+            and context.investigation_plan.strategy == "lightweight_review"
+        ):
+            context.status = CaseStatus.CLOSED
+            context.approval_request = None
+            summary = "Low-risk case closed after planned compliance review."
         elif context.priority in {Priority.HIGH, Priority.CRITICAL}:
             context.status = CaseStatus.NEEDS_APPROVAL
             context.approval_request = ApprovalRequest(

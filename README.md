@@ -15,9 +15,9 @@ The current deployed demo runs on Cloud Run with authenticated access, backend-o
 | Area | Current Status |
 | --- | --- |
 | Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
-| Demo Dashboard | `/dashboard` shows case summary, dynamic investigation plan, agent findings, privacy-separated Veritas signal, network links, compliance, approval state, async job state, and Agent Registry. |
+| Demo Dashboard | `/dashboard` shows case summary, agent-generated investigation plan, agent findings, privacy-separated Veritas signal, network links, compliance, approval state, async job state, and Agent Registry. |
 | Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept, deny, request more evidence, and tune stored risk thresholds. |
-| Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions with low, medium, high, and critical priorities while avoiding recent repeats. |
+| Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions with low, medium, high, critical, and missing-data paths while avoiding recent repeats. |
 | Async Demo Flow | `Run Async Demo` enqueues an investigation job; Cloud Run receives the real Pub/Sub push at `/pubsub/investigations` and stores job completion in Firestore. |
 | AI Provider | `vertex_ai` in Cloud Run, with `gemini-2.5-flash` configured backend-only. |
 | Google ADK | Triage, Network, and Case Manager agents bind to real `google.adk` `Agent` definitions when the package is installed. |
@@ -33,7 +33,7 @@ TraceLayer now includes concrete enterprise controls in the runnable backend:
 | Agent Identity | `AgentRegistry` assigns service identities, versions, permissions, and data access classes. |
 | Google ADK Runtime | `AdkAgentRuntime` creates Google ADK `Agent` definitions for Triage, Network, and Case Manager and records runtime metadata in each case output. |
 | Agent Gateway | `AgentGateway` authorizes every agent run before execution. |
-| Dynamic Planning | `CaseManagerPlanningAgent` creates a case-specific investigation plan after triage; the fleet executes only the selected steps. |
+| Dynamic Planning | `CaseManagerPlanningAgent` creates an initial triage-first plan, replans after risk scoring, and the fleet executes only the selected action handlers. |
 | Least Privilege | `PolicyEngine` checks role scopes, agent permissions, and data classification. |
 | Model Armor Boundary | `ModelArmorGuardrail` scans model inputs and outputs for prompt injection and PII. |
 | Memory Bank | `MemoryBank` stores append-only local snapshots; `FirestoreMemoryBank` stores deployed case state and approval updates. |
@@ -55,9 +55,9 @@ A customer's overseas wire transfer is flagged as suspicious.
 TraceLayer will:
 
 1. Score the transaction and assign investigation priority.
-2. Ask the Case Manager Agent to create a dynamic investigation plan.
-3. Generate an embedded Veritas federated risk signal from simulated bank, insurer, and fintech nodes.
-4. Execute only the planned agent steps for the case priority.
+2. Ask the Case Manager Agent to create an initial investigation plan.
+3. Run Triage, then let the Case Manager replan from the actual risk, federated signal, and missing-data state.
+4. Execute only the planned action handlers for the case priority.
 5. Check for PII exposure, policy violations, and unsafe automation.
 6. Generate a case summary, route medium-risk cases to analyst review, and request supervisor approval for high-risk actions.
 
@@ -65,12 +65,12 @@ The planner changes the workflow by risk:
 
 | Priority | Planned Strategy | Agent Steps |
 | --- | --- | --- |
-| Low | `lightweight_review` | Triage, Compliance, Case Manager |
+| Low | `lightweight_review` | Triage, Compliance, Close |
 | Medium | `manual_review` | Triage, Evidence, Compliance, Case Manager |
-| High / Critical | `deep_network_investigation` | Triage, Network, Evidence, Compliance, Case Manager |
-| Missing Data | `pause_for_more_data` | Triage, Case Manager request-more-data pause |
+| High / Critical | `deep_network_investigation` | Triage, Federated Intelligence, Network, Evidence, Compliance, Human Approval |
+| Missing Data | `pause_for_more_data` | Triage, Request More Data, Pause |
 
-The demo currently includes eight flagged trigger scenarios:
+The demo currently includes nine flagged trigger scenarios:
 
 | Trigger | Expected Priority | Scenario |
 | --- | --- | --- |
@@ -82,6 +82,7 @@ The demo currently includes eight flagged trigger scenarios:
 | `tx-9001` | Critical | High-value overseas wire transfer to Singapore with unusual timing and shared infrastructure. |
 | `tx-9101` | Critical | High-value UAE wire transfer with shared device, IP, and counterparty signals. |
 | `tx-9701` | Critical | Prompt injection live demo: external memo asks the model to ignore instructions and export customer account numbers. |
+| `tx-9801` | Missing Data | Incomplete ACH alert that causes the Case Manager to request additional evidence and pause. |
 
 ## Live Security Demo
 
@@ -121,7 +122,7 @@ jsonPayload.status="succeeded"
 | Network Agent | Runs related-transaction search only when selected by the investigation plan. |
 | Evidence Agent | Builds the evidence timeline from transaction records and internal policy. |
 | Compliance Agent | Checks PII exposure, access boundaries, policy conflicts, and tool safety. |
-| Case Manager Agent | Builds the dynamic investigation plan, maintains case state, routes medium-risk cases to analyst review, and requests supervisor approval for high-risk actions. |
+| Case Manager Agent | Builds the initial and post-triage investigation plans, maintains case state, routes medium-risk cases to analyst review, pauses missing-data cases, and requests supervisor approval for high-risk actions. |
 
 ## Embedded Veritas Layer
 
