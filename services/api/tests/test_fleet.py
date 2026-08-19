@@ -118,6 +118,49 @@ def test_demo_scenarios_cover_risk_priority_range(tmp_path: Path) -> None:
     assert results["tx-9601"].approval_request is not None
 
 
+def test_case_manager_plans_low_risk_lightweight_review(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    case = fleet.investigate("tx-9301", create_case_run=True)
+
+    assert case.investigation_plan is not None
+    assert case.investigation_plan.strategy == "lightweight_review"
+    assert [step.agent_id for step in case.investigation_plan.steps] == [
+        "triage-agent",
+        "compliance-agent",
+        "case-manager-agent",
+    ]
+    assert all(step.status == "completed" for step in case.investigation_plan.steps)
+    assert {output.agent_id for output in case.agent_outputs} == {
+        "triage-agent",
+        "case-manager-agent",
+        "compliance-agent",
+    }
+    assert case.network_links == []
+    assert case.evidence_timeline == []
+    assert case.status == "open"
+
+
+def test_case_manager_plans_high_risk_deep_network_investigation(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    case = fleet.investigate("tx-9001", create_case_run=True)
+
+    assert case.investigation_plan is not None
+    assert case.investigation_plan.strategy == "deep_network_investigation"
+    assert [step.agent_id for step in case.investigation_plan.steps] == [
+        "triage-agent",
+        "network-agent",
+        "evidence-agent",
+        "compliance-agent",
+        "case-manager-agent",
+    ]
+    assert all(step.status == "completed" for step in case.investigation_plan.steps)
+    assert len(case.network_links) >= 1
+    assert len(case.evidence_timeline) >= 1
+    assert case.approval_request is not None
+
+
 def test_supervisor_can_store_risk_threshold_policy(tmp_path: Path) -> None:
     fleet = _test_fleet(tmp_path)
     supervisor = RequestContext(

@@ -25,8 +25,31 @@ class ReportWriter:
             f"- Memory Snapshot: {case.memory_snapshot_id or 'pending'}",
             f"- Audit Chain Tip: {case.audit_chain_tip or 'pending'}",
             "",
-            "## Agent Findings",
+            "## Dynamic Investigation Plan",
         ]
+
+        if case.investigation_plan:
+            plan = case.investigation_plan
+            lines.extend(
+                [
+                    f"- Strategy: {plan.strategy}",
+                    f"- Created By: {plan.created_by_agent_id}",
+                    f"- Rationale: {plan.rationale}",
+                    "",
+                ]
+            )
+            for step in plan.steps:
+                lines.append(
+                    f"- {step.status.upper()} | {step.agent_id} | "
+                    f"{step.action} | {step.reason}"
+                )
+            lines.append("")
+        else:
+            lines.extend(["- No investigation plan was recorded.", ""])
+
+        lines.extend([
+            "## Agent Findings",
+        ])
 
         for output in case.agent_outputs:
             lines.extend(

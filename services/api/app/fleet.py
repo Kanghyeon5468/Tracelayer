@@ -7,6 +7,7 @@ from uuid import uuid4
 from app.agents import (
     AgentRegistry,
     CaseManagerAgent,
+    CaseManagerPlanningAgent,
     ComplianceAgent,
     EvidenceAgent,
     NetworkAgent,
@@ -27,6 +28,7 @@ from app.domain.models import (
     InvestigationJob,
     InvestigationJobStatus,
     PendingApprovalSummary,
+    PlanStepStatus,
     RequestContext,
     RiskPolicy,
 )
@@ -102,10 +104,6 @@ class FraudInvestigationFleet:
 
         trigger = self.repository.get_transaction(transaction_id)
         customer = self.repository.get_customer(trigger.customer_id)
-        network_search = BigQueryNetworkSearch(self.settings, self.repository)
-        network_result = network_search.find_related_transactions(trigger)
-        related_transactions = network_result.transactions
-
         case_id = f"case-{trigger.transaction_id}"
         if create_case_run:
             case_id = f"{case_id}-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}-{uuid4().hex[:6]}"
@@ -114,8 +112,6 @@ class FraudInvestigationFleet:
             case_id=case_id,
             trigger_transaction=trigger,
             customer=customer,
-            related_transactions=related_transactions,
-            network_search_metadata=network_result.metadata,
         )
 
         self.bus.publish(
@@ -125,21 +121,30 @@ class FraudInvestigationFleet:
 
         policy_text = self.repository.read_policy_text()
         risk_policy = self.risk_policy_store.load_policy()
-        agents = [
-            TriageAgent(
+        network_search = BigQueryNetworkSearch(self.settings, self.repository)
+        agent_by_id = {
+            "triage-agent": TriageAgent(
                 self.registry.get("triage-agent"),
                 self.reasoner,
                 self.federated_engine,
                 risk_policy,
             ),
-            NetworkAgent(self.registry.get("network-agent")),
-            EvidenceAgent(self.registry.get("evidence-agent"), policy_text),
-            ComplianceAgent(self.registry.get("compliance-agent")),
-            CaseManagerAgent(self.registry.get("case-manager-agent")),
-        ]
+            "network-agent": NetworkAgent(
+                self.registry.get("network-agent"),
+                network_search,
+            ),
+            "evidence-agent": EvidenceAgent(self.registry.get("evidence-agent"), policy_text),
+            "compliance-agent": ComplianceAgent(self.registry.get("compliance-agent")),
+            "case-manager-agent": CaseManagerAgent(self.registry.get("case-manager-agent")),
+        }
 
-        for agent in agents:
-            self.gateway.run_agent(agent, context, request)
+        self.gateway.run_agent(agent_by_id["triage-agent"], context, request)
+        self.gateway.run_agent(
+            CaseManagerPlanningAgent(self.registry.get("case-manager-agent")),
+            context,
+            request,
+        )
+        self._execute_investigation_plan(agent_by_id, context, request)
 
         case = InvestigationCase(
             case_id=context.case_id,
@@ -152,6 +157,7 @@ class FraudInvestigationFleet:
             network_links=context.network_links,
             evidence_timeline=context.evidence_timeline,
             compliance_findings=context.compliance_findings,
+            investigation_plan=context.investigation_plan,
             approval_request=context.approval_request,
             guardrail_findings=context.guardrail_findings,
             federated_risk_signal=context.federated_risk_signal,
@@ -189,6 +195,25 @@ class FraudInvestigationFleet:
         case = case.model_copy(update={"audit_chain_tip": final_event.event_hash})
         self.report_writer.write_markdown(case)
         return case
+
+    def _execute_investigation_plan(
+        self,
+        agent_by_id: dict[str, object],
+        context: InvestigationContext,
+        request: RequestContext,
+    ) -> None:
+        if not context.investigation_plan:
+            raise ValueError("Case Manager did not produce an investigation plan.")
+
+        for step in context.investigation_plan.steps:
+            if step.status != PlanStepStatus.PLANNED:
+                continue
+            agent = agent_by_id.get(step.agent_id)
+            if not agent:
+                step.status = PlanStepStatus.SKIPPED
+                continue
+            self.gateway.run_agent(agent, context, request)
+            step.status = PlanStepStatus.COMPLETED
 
     def investigate_random_demo(
         self,

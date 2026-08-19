@@ -33,6 +33,43 @@ const fallbackCase = {
       confidence: 0.9,
     },
   ],
+  investigation_plan: {
+    plan_id: "plan-case-tx-9001",
+    strategy: "deep_network_investigation",
+    rationale:
+      "High-risk cases require network discovery, evidence collection, compliance review, and supervisor approval.",
+    created_by_agent_id: "case-manager-agent",
+    steps: [
+      {
+        step_id: "triage",
+        agent_id: "triage-agent",
+        action: "score_transaction",
+        reason: "Score and classify every flagged transaction.",
+        status: "completed",
+      },
+      {
+        step_id: "network",
+        agent_id: "network-agent",
+        action: "search_related_transactions",
+        reason: "Find shared accounts, devices, IPs, emails, and counterparties.",
+        status: "completed",
+      },
+      {
+        step_id: "evidence",
+        agent_id: "evidence-agent",
+        action: "build_evidence_timeline",
+        reason: "Build timeline from trigger, network, and federated evidence.",
+        status: "completed",
+      },
+      {
+        step_id: "approval",
+        agent_id: "case-manager-agent",
+        action: "request_supervisor_approval",
+        reason: "Require supervisor approval before any outbound hold.",
+        status: "completed",
+      },
+    ],
+  },
   network_links: [
     {
       source: "tx-9001",
@@ -245,6 +282,26 @@ const renderCase = (caseData) => {
     )
     .join("");
 
+  const plan = caseData.investigation_plan;
+  document.querySelector("#investigation-plan").innerHTML = plan
+    ? `
+      <div class="item">
+        <strong>${titleCase(plan.strategy)}</strong>
+        <p>${plan.rationale}</p>
+      </div>
+      ${plan.steps
+        .map(
+          (step) => `
+        <div class="item">
+          <strong>${titleCase(step.status)}: ${titleCase(step.agent_id)}</strong>
+          <p>${titleCase(step.action)} · ${step.reason}</p>
+        </div>
+      `,
+        )
+        .join("")}
+    `
+    : '<div class="item"><strong>No plan</strong><p>No dynamic plan was attached.</p></div>';
+
   document.querySelector("#network-links").innerHTML = caseData.network_links
     .map(
       (item) => `
@@ -254,7 +311,7 @@ const renderCase = (caseData) => {
         </div>
       `,
     )
-    .join("");
+    .join("") || '<div class="item"><strong>No links searched</strong><p>This plan did not run network discovery.</p></div>';
 
   const signal = caseData.federated_risk_signal;
   document.querySelector("#federated-signal").innerHTML = signal

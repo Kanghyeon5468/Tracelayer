@@ -20,6 +20,29 @@ class Priority(StrEnum):
     CRITICAL = "critical"
 
 
+class PlanStepStatus(StrEnum):
+    PLANNED = "planned"
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
+
+
+class InvestigationPlanStep(BaseModel):
+    step_id: str
+    agent_id: str
+    action: str
+    reason: str
+    status: PlanStepStatus = PlanStepStatus.PLANNED
+
+
+class InvestigationPlan(BaseModel):
+    plan_id: str
+    strategy: str
+    rationale: str
+    created_by_agent_id: str = "case-manager-agent"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    steps: list[InvestigationPlanStep] = Field(default_factory=list)
+
+
 class RiskPolicy(BaseModel):
     policy_id: str = "default"
     medium_threshold: int = Field(default=40, ge=0, le=100)
@@ -254,6 +277,7 @@ class InvestigationContext(BaseModel):
     network_links: list[NetworkLink] = Field(default_factory=list)
     compliance_findings: list[ComplianceFinding] = Field(default_factory=list)
     approval_request: ApprovalRequest | None = None
+    investigation_plan: InvestigationPlan | None = None
     agent_outputs: list[AgentOutput] = Field(default_factory=list)
     guardrail_findings: list[GuardrailFinding] = Field(default_factory=list)
     federated_risk_signal: FederatedRiskSignal | None = None
@@ -277,6 +301,7 @@ class InvestigationCase(BaseModel):
     network_links: list[NetworkLink]
     evidence_timeline: list[EvidenceEvent]
     compliance_findings: list[ComplianceFinding]
+    investigation_plan: InvestigationPlan | None = None
     approval_request: ApprovalRequest | None = None
     report_path: str | None = None
     guardrail_findings: list[GuardrailFinding] = Field(default_factory=list)

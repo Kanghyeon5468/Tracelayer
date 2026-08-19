@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 from app.agents.base import BaseInvestigationAgent
+from app.connectors.bigquery_network import BigQueryNetworkSearch
 from app.domain.models import AgentIdentity, AgentOutput, InvestigationContext, NetworkLink
 
 
 class NetworkAgent(BaseInvestigationAgent):
     required_permissions = ["transactions.read", "graph.search"]
 
-    def __init__(self, identity: AgentIdentity) -> None:
+    def __init__(self, identity: AgentIdentity, network_search: BigQueryNetworkSearch) -> None:
         self.identity = identity
+        self.network_search = network_search
 
     def run(self, context: InvestigationContext) -> AgentOutput:
         trigger = context.trigger_transaction
+        network_result = self.network_search.find_related_transactions(trigger)
+        context.related_transactions = network_result.transactions
+        context.network_search_metadata = network_result.metadata
         links: list[NetworkLink] = []
 
         for transaction in context.related_transactions:

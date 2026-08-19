@@ -15,7 +15,7 @@ The current deployed demo runs on Cloud Run with authenticated access, backend-o
 | Area | Current Status |
 | --- | --- |
 | Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
-| Demo Dashboard | `/dashboard` shows case summary, agent findings, network links, Veritas signal, compliance, approval state, async job state, and Agent Registry. |
+| Demo Dashboard | `/dashboard` shows case summary, dynamic investigation plan, agent findings, network links, Veritas signal, compliance, approval state, async job state, and Agent Registry. |
 | Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept or deny each case and tune stored risk thresholds. |
 | Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions with low, medium, high, and critical priorities while avoiding recent repeats. |
 | Async Demo Flow | `Run Async Demo` enqueues a Pub/Sub-style job, invokes the worker route, then loads the completed case. |
@@ -31,6 +31,7 @@ TraceLayer now includes concrete enterprise controls in the runnable backend:
 | --- | --- |
 | Agent Identity | `AgentRegistry` assigns service identities, versions, permissions, and data access classes. |
 | Agent Gateway | `AgentGateway` authorizes every agent run before execution. |
+| Dynamic Planning | `CaseManagerPlanningAgent` creates a case-specific investigation plan after triage; the fleet executes only the selected steps. |
 | Least Privilege | `PolicyEngine` checks role scopes, agent permissions, and data classification. |
 | Model Armor Boundary | `ModelArmorGuardrail` scans model inputs and outputs for prompt injection and PII. |
 | Memory Bank | `MemoryBank` stores append-only local snapshots; `FirestoreMemoryBank` stores deployed case state and approval updates. |
@@ -49,11 +50,20 @@ A customer's overseas wire transfer is flagged as suspicious.
 TraceLayer will:
 
 1. Score the transaction and assign investigation priority.
-2. Generate an embedded Veritas federated risk signal from simulated bank, insurer, and fintech nodes.
-3. Find related accounts, devices, IP addresses, emails, and counterparties.
-4. Build a chronological evidence timeline from transaction, policy, and federated provenance data.
+2. Ask the Case Manager Agent to create a dynamic investigation plan.
+3. Generate an embedded Veritas federated risk signal from simulated bank, insurer, and fintech nodes.
+4. Execute only the planned agent steps for the case priority.
 5. Check for PII exposure, policy violations, and unsafe automation.
 6. Generate a case summary, route medium-risk cases to analyst review, and request supervisor approval for high-risk actions.
+
+The planner changes the workflow by risk:
+
+| Priority | Planned Strategy | Agent Steps |
+| --- | --- | --- |
+| Low | `lightweight_review` | Triage, Compliance, Case Manager |
+| Medium | `manual_review` | Triage, Evidence, Compliance, Case Manager |
+| High / Critical | `deep_network_investigation` | Triage, Network, Evidence, Compliance, Case Manager |
+| Missing Data | `pause_for_more_data` | Triage, Case Manager request-more-data pause |
 
 The demo currently includes seven flagged trigger scenarios:
 
@@ -72,10 +82,10 @@ The demo currently includes seven flagged trigger scenarios:
 | Agent | Responsibility |
 | --- | --- |
 | Triage Agent | Scores suspicious activity and decides investigation priority. |
-| Network Agent | Finds links across accounts, devices, IPs, emails, and counterparties. |
+| Network Agent | Runs related-transaction search only when selected by the investigation plan. |
 | Evidence Agent | Builds the evidence timeline from transaction records and internal policy. |
 | Compliance Agent | Checks PII exposure, access boundaries, policy conflicts, and tool safety. |
-| Case Manager Agent | Maintains case state, routes medium-risk cases to analyst review, and requests supervisor approval for high-risk actions. |
+| Case Manager Agent | Builds the dynamic investigation plan, maintains case state, routes medium-risk cases to analyst review, and requests supervisor approval for high-risk actions. |
 
 ## Embedded Veritas Layer
 
