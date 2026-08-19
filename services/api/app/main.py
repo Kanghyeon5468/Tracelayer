@@ -10,6 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from app.adk_runtime import AdkAgentRuntime
 from app.agents.registry import AgentRegistry
 from app.config import get_settings
+from app.connectors.repository import InvestigationRepository
+from app.connectors.scenario_builder import SyntheticScenarioBuilder
 from app.domain.models import (
     AgentIdentity,
     ApprovalDecisionRequest,
@@ -22,6 +24,7 @@ from app.domain.models import (
     PubSubPushEnvelope,
     RequestContext,
     RiskPolicy,
+    ScenarioInvestigationRequest,
 )
 from app.fleet import FraudInvestigationFleet
 from app.observability.audit import AuditLedger
@@ -106,6 +109,11 @@ def admin_console() -> RedirectResponse:
     return RedirectResponse(url="/console/admin.html")
 
 
+@app.get("/demo", include_in_schema=False)
+def prompt_demo_console() -> RedirectResponse:
+    return RedirectResponse(url="/console/demo.html")
+
+
 @app.get("/agents", response_model=list[AgentIdentity])
 def list_agents(request: RequestContext = Depends(get_request_context)) -> list[AgentIdentity]:
     _require_scope(request, "agents.read")
@@ -123,6 +131,36 @@ def enqueue_demo_case(
     request: RequestContext = Depends(get_request_context),
 ) -> InvestigationJob:
     return _run_or_raise(lambda: FraudInvestigationFleet(settings).enqueue_random_demo(request))
+
+
+@app.post("/cases/scenario", response_model=InvestigationCase)
+def run_prompt_scenario(
+    scenario: ScenarioInvestigationRequest,
+    request: RequestContext = Depends(get_request_context),
+) -> InvestigationCase:
+    synthetic = SyntheticScenarioBuilder().build(
+        prompt=scenario.prompt,
+        scenario_name=scenario.scenario_name,
+    )
+    repository = InvestigationRepository(
+        transactions=synthetic.transactions,
+        customers=[synthetic.customer],
+    )
+    fleet = FraudInvestigationFleet(settings, repository=repository)
+    case = _run_or_raise(
+        lambda: fleet.investigate(
+            synthetic.trigger_transaction_id,
+            request,
+            create_case_run=True,
+        )
+    )
+    case = case.model_copy(
+        update={"agent_outputs": [synthetic.to_agent_output(), *case.agent_outputs]}
+    )
+    memory_snapshot_id = fleet.memory_bank.save_case(case)
+    case = case.model_copy(update={"memory_snapshot_id": memory_snapshot_id})
+    fleet.report_writer.write_markdown(case)
+    return redact_case_for_role(case, request.role)
 
 
 @app.get("/jobs/{job_id}", response_model=InvestigationJob)

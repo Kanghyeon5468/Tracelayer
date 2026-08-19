@@ -306,6 +306,11 @@ class InvestigationRequest(BaseModel):
     transaction_id: str = "tx-9001"
 
 
+class ScenarioInvestigationRequest(BaseModel):
+    prompt: str = Field(min_length=12, max_length=3000)
+    scenario_name: str | None = Field(default=None, max_length=80)
+
+
 class InvestigationCase(BaseModel):
     case_id: str
     status: CaseStatus

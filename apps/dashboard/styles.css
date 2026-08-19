@@ -149,6 +149,19 @@ input {
   font: inherit;
 }
 
+textarea {
+  width: 100%;
+  min-height: 230px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.5;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -816,6 +829,70 @@ label {
   background: #fff7f5;
 }
 
+.demo-shell {
+  width: min(1320px, calc(100vw - 32px));
+}
+
+.demo-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.82fr) minmax(0, 1.18fr);
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.demo-prompt-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.scenario-output {
+  display: grid;
+  gap: 14px;
+}
+
+.demo-case-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 0;
+}
+
+.demo-federated {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.demo-open-row {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.demo-result-grid {
+  align-items: start;
+}
+
+.plan-step-item p {
+  font-size: 0.9rem;
+}
+
+#demo-status[data-kind="success"] {
+  color: var(--accent-strong);
+}
+
+#demo-status[data-kind="error"] {
+  color: var(--risk);
+}
+
+#demo-status[data-kind="running"] {
+  color: #1d4ed8;
+}
+
 @media (max-width: 760px) {
   .topbar {
     align-items: stretch;
@@ -860,6 +937,7 @@ label {
 
   .admin-controls,
   .admin-layout,
+  .demo-layout,
   .risk-policy-grid,
   .approval-row,
   .log-row {
@@ -872,7 +950,8 @@ label {
   }
 
   .admin-strip,
-  .case-summary-list {
+  .case-summary-list,
+  .demo-case-strip {
     grid-template-columns: 1fr;
   }
 

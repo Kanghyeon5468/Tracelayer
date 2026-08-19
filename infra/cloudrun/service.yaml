@@ -23,11 +23,11 @@ spec:
             - name: AI_PROVIDER
               value: vertex_ai
             - name: GEMINI_MODEL
-              value: gemini-2.5-flash
+              value: gemini-3-flash-preview
             - name: GOOGLE_CLOUD_PROJECT
               value: PROJECT_ID
             - name: GOOGLE_CLOUD_LOCATION
-              value: us-central1
+              value: global
             - name: MEMORY_BACKEND
               value: firestore
             - name: FIRESTORE_DATABASE

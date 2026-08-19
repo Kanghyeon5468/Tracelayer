@@ -29,7 +29,7 @@ gcloud run deploy tracelayer-api \
   --region $REGION \
   --service-account tracelayer-agent@$PROJECT_ID.iam.gserviceaccount.com \
   --no-allow-unauthenticated \
-  --set-env-vars APP_ENV=cloud,USE_MOCK_DATA=true,AI_PROVIDER=vertex_ai,GEMINI_MODEL=gemini-2.5-flash,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=$REGION,SECURITY_MODE=enforcing,DEMO_ANALYST_API_KEY=local-demo-key,MEMORY_BACKEND=firestore,FIRESTORE_DATABASE='(default)',FIRESTORE_CASE_COLLECTION=tracelayer_cases,FIRESTORE_JOB_COLLECTION=tracelayer_investigation_jobs,NETWORK_SEARCH_BACKEND=auto,NETWORK_SEARCH_TIMEOUT_SECONDS=3,BIGQUERY_TRANSACTIONS_TABLE=$PROJECT_ID.fraud_investigations.transactions,PUBSUB_BACKEND=google,PUBSUB_TOPIC_INVESTIGATIONS=tracelayer-investigations,PUBSUB_TOPIC_APPROVALS=tracelayer-approvals,PUBSUB_PUSH_SUBSCRIPTION=tracelayer-investigation-worker
+  --set-env-vars APP_ENV=cloud,USE_MOCK_DATA=true,AI_PROVIDER=vertex_ai,GEMINI_MODEL=gemini-3-flash-preview,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,SECURITY_MODE=enforcing,DEMO_ANALYST_API_KEY=local-demo-key,MEMORY_BACKEND=firestore,FIRESTORE_DATABASE='(default)',FIRESTORE_CASE_COLLECTION=tracelayer_cases,FIRESTORE_JOB_COLLECTION=tracelayer_investigation_jobs,NETWORK_SEARCH_BACKEND=auto,NETWORK_SEARCH_TIMEOUT_SECONDS=3,BIGQUERY_TRANSACTIONS_TABLE=$PROJECT_ID.fraud_investigations.transactions,PUBSUB_BACKEND=google,PUBSUB_TOPIC_INVESTIGATIONS=tracelayer-investigations,PUBSUB_TOPIC_APPROVALS=tracelayer-approvals,PUBSUB_PUSH_SUBSCRIPTION=tracelayer-investigation-worker
 ```
 
 ## Pub/Sub Push Worker

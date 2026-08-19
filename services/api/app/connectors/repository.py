@@ -9,10 +9,17 @@ from app.domain.models import Customer, Transaction
 class InvestigationRepository:
     """Repository boundary for Firestore, Cloud SQL, or BigQuery replacement later."""
 
-    def __init__(self, data_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        data_dir: Path | None = None,
+        transactions: list[Transaction] | None = None,
+        customers: list[Customer] | None = None,
+        policy_text: str | None = None,
+    ) -> None:
         self.data_dir = data_dir or self._default_data_dir()
-        self._transactions = self._load_transactions()
-        self._customers = self._load_customers()
+        self._transactions = transactions if transactions is not None else self._load_transactions()
+        self._customers = customers if customers is not None else self._load_customers()
+        self._policy_text = policy_text
 
     def get_transaction(self, transaction_id: str) -> Transaction:
         for transaction in self._transactions:
@@ -54,6 +61,8 @@ class InvestigationRepository:
         return sorted(related, key=lambda item: item.timestamp)
 
     def read_policy_text(self) -> str:
+        if self._policy_text is not None:
+            return self._policy_text
         return (self.data_dir / "policies.md").read_text(encoding="utf-8")
 
     def _load_transactions(self) -> list[Transaction]:
