@@ -210,7 +210,7 @@ class CaseManagerAgent(BaseInvestigationAgent):
         elif context.priority in {Priority.HIGH, Priority.CRITICAL}:
             context.status = CaseStatus.NEEDS_APPROVAL
             context.approval_request = ApprovalRequest(
-                approval_id=f"appr-{context.case_id}",
+                approval_id=self._next_approval_id(context),
                 action="review_outbound_transfer_hold",
                 reason=(
                     "The case contains a high-value overseas transfer with shared "
@@ -220,7 +220,7 @@ class CaseManagerAgent(BaseInvestigationAgent):
         elif context.priority == Priority.MEDIUM:
             context.status = CaseStatus.NEEDS_APPROVAL
             context.approval_request = ApprovalRequest(
-                approval_id=f"appr-{context.case_id}",
+                approval_id=self._next_approval_id(context),
                 action="manual_case_review",
                 reason=(
                     "The case contains medium-risk anomaly signals. A human analyst "
@@ -253,6 +253,12 @@ class CaseManagerAgent(BaseInvestigationAgent):
         )
         context.agent_outputs.append(output)
         return output
+
+    @staticmethod
+    def _next_approval_id(context: InvestigationContext) -> str:
+        if not context.approval_history:
+            return f"appr-{context.case_id}"
+        return f"appr-{context.case_id}-r{len(context.approval_history) + 1}"
 
     def _adk_binding(self) -> dict:
         if not self.adk_runtime:

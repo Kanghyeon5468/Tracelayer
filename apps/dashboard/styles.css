@@ -481,6 +481,11 @@ label {
   color: #b42318;
 }
 
+.status-pill.more_evidence {
+  background: #eef4ff;
+  color: #1d4ed8;
+}
+
 .approval-row:first-child {
   border-top: 0;
   padding-top: 0;

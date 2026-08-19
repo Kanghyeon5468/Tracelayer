@@ -16,9 +16,9 @@ The current deployed demo runs on Cloud Run with authenticated access, backend-o
 | --- | --- |
 | Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
 | Demo Dashboard | `/dashboard` shows case summary, dynamic investigation plan, agent findings, network links, Veritas signal, compliance, approval state, async job state, and Agent Registry. |
-| Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept or deny each case and tune stored risk thresholds. |
+| Admin Console | `/admin` lists pending approvals and approval history; supervisors can accept, deny, request more evidence, and tune stored risk thresholds. |
 | Randomized Demo Cases | `Run Demo Case` rotates across multiple flagged transactions with low, medium, high, and critical priorities while avoiding recent repeats. |
-| Async Demo Flow | `Run Async Demo` enqueues a Pub/Sub-style job, invokes the worker route, then loads the completed case. |
+| Async Demo Flow | `Run Async Demo` enqueues an investigation job; Cloud Run receives the real Pub/Sub push at `/pubsub/investigations` and stores job completion in Firestore. |
 | AI Provider | `vertex_ai` in Cloud Run, with `gemini-2.5-flash` configured backend-only. |
 | Google ADK | Triage, Network, and Case Manager agents bind to real `google.adk` `Agent` definitions when the package is installed. |
 | Memory | Firestore persists case snapshots, approval decisions, and async investigation jobs. |
@@ -39,9 +39,10 @@ TraceLayer now includes concrete enterprise controls in the runnable backend:
 | Memory Bank | `MemoryBank` stores append-only local snapshots; `FirestoreMemoryBank` stores deployed case state and approval updates. |
 | Audit Ledger | `AuditLedger` writes hash-chained JSONL events for tamper-evident review. |
 | Risk Policy Store | `RiskPolicyStore` persists medium, high, and critical thresholds locally or in Firestore. |
-| Human Approval | Medium-risk cases create manual review requests; high-risk actions require supervisor approval before any hold. |
+| Human Approval | Medium-risk cases create manual review requests; high-risk actions require supervisor approval before any hold. Reviewers can request more evidence, which reruns Evidence, Compliance, and Case Manager agents. |
 | Embedded Veritas Federation | `VeritasFederatedRiskEngine` produces cross-institution risk signals without raw record movement. |
 | BigQuery Network Boundary | `BigQueryNetworkSearch` uses parameterized BigQuery queries when available and records fallback metadata. |
+| Pub/Sub Worker | `GooglePubSubBus` publishes queued work to Pub/Sub; authenticated push delivery invokes `/pubsub/investigations` on Cloud Run. |
 | Async Job State | `InvestigationJob` stores queued/running/succeeded/failed state in local JSONL or Firestore. |
 | Agent Registry UI | Dashboard renders service accounts, permissions, versions, and data access classes from `/agents`. |
 
@@ -256,10 +257,10 @@ Expected demo path:
 
 1. Open `/dashboard`.
 2. Click `Run Demo Case` for synchronous investigation.
-3. Click `Run Async Demo` to show queued job state and worker completion.
+3. Click `Run Async Demo` to show queued job state and Pub/Sub worker completion.
 4. Review `Agent Registry` to show agent identity, permissions, and data access.
 5. Open `/admin`.
-6. Approve or deny pending cases.
+6. Approve, deny, or request more evidence for pending cases.
 7. Return to `/dashboard` and confirm the approval status updates through browser live sync.
 
 ## Google Cloud Mapping
@@ -270,7 +271,7 @@ Expected demo path:
 | Agent framework boundary | `AdkAgentRuntime` plus agent classes under `services/api/app/agents` | Google ADK agent runtime with GenAI/Vertex model access |
 | Transaction store | JSON files in `data/` | Firestore, Cloud SQL, or BigQuery |
 | Related transaction search | JSON repository fallback | BigQuery via `BigQueryNetworkSearch` |
-| Async work distribution | Job enqueue plus worker route | Pub/Sub topic and worker service |
+| Async work distribution | Local job enqueue plus manual worker route | Pub/Sub push subscription invoking `/pubsub/investigations` on Cloud Run |
 | Memory bank | Local JSONL append-only snapshots | Firestore case and job collections |
 | Model calls | Mock, Gemini API, or Vertex AI | Gemini through Vertex AI with service account credentials |
 | Guardrails | Compliance checks and redaction utilities | Model Armor and Agent Gateway policies |
@@ -284,15 +285,16 @@ Expected demo path:
 | `GET /agents` | Lists registered agent identities, permissions, and data access classes. |
 | `POST /cases/demo` | Runs a randomized synchronous demo investigation. |
 | `POST /cases/demo/async` | Enqueues a Pub/Sub-style investigation job. |
+| `POST /pubsub/investigations` | Receives authenticated Pub/Sub push messages and runs queued investigation jobs. |
 | `POST /jobs/{job_id}/run` | Runs the worker step for a queued investigation job. |
 | `GET /jobs/{job_id}` | Reads async job status and generated case ID. |
 | `POST /cases/investigate` | Runs investigation for an explicit transaction ID. |
 | `GET /cases/{case_id}` | Reads a persisted case from the memory bank. |
 | `GET /approvals/pending` | Lists pending supervisor approval requests. |
-| `GET /approvals/log` | Lists pending, approved, and denied approval history. |
+| `GET /approvals/log` | Lists pending, approved, denied, and more-evidence approval history. |
 | `GET /risk-policy` | Reads the active medium, high, and critical risk thresholds. |
 | `PUT /risk-policy` | Persists supervisor-updated risk thresholds for future investigations. |
-| `POST /cases/{case_id}/approval` | Accepts or denies a human approval request. |
+| `POST /cases/{case_id}/approval` | Accepts, denies, or requests more evidence for a human approval request. |
 | `GET /cases/{case_id}/audit` | Reads hash-chained audit events for a case. |
 | `GET /audit/verify` | Verifies the local audit chain. |
 
@@ -311,6 +313,10 @@ Important values:
 | `GEMINI_API_KEY` | Enables backend-only Gemini API calls in `gemini_api` mode. |
 | `GEMINI_MODEL` | Defaults to `gemini-2.5-flash`, a broadly available Vertex AI Flash model. |
 | `GOOGLE_CLOUD_PROJECT` | Project used by Cloud Run, Pub/Sub, BigQuery, and Firestore. |
+| `PUBSUB_BACKEND` | Selects `auto`, `local`, or `google` for async investigation work distribution. |
+| `PUBSUB_TOPIC_INVESTIGATIONS` | Pub/Sub topic used by queued investigation jobs. |
+| `PUBSUB_TOPIC_APPROVALS` | Pub/Sub topic used for approval-request events. |
+| `PUBSUB_PUSH_SUBSCRIPTION` | Name of the push subscription targeting `/pubsub/investigations`. |
 | `NETWORK_SEARCH_BACKEND` | Selects `auto`, `local`, or `bigquery` for related-transaction search. |
 | `BIGQUERY_TRANSACTIONS_TABLE` | Fully qualified BigQuery table for the Network Agent search path. |
 | `NETWORK_SEARCH_TIMEOUT_SECONDS` | Short BigQuery fallback timeout for demo-safe auto mode. |

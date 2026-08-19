@@ -26,8 +26,11 @@ class Settings(BaseSettings):
     network_search_backend: str = "auto"
     network_search_limit: int = 50
     network_search_timeout_seconds: int = 3
+    pubsub_backend: str = "auto"
     pubsub_topic_investigations: str = "tracelayer-investigations"
     pubsub_topic_approvals: str = "tracelayer-approvals"
+    pubsub_push_subscription: str = "tracelayer-investigation-worker"
+    pubsub_push_invoker_service_account: str | None = None
     security_mode: str = "permissive"
     demo_analyst_api_key: str = "local-demo-key"
     allowed_origins: str = "http://localhost:8080,http://localhost:5173,file://"
@@ -56,6 +59,14 @@ class Settings(BaseSettings):
     @property
     def resolved_adk_model(self) -> str:
         return self.adk_model or self.gemini_model
+
+    @property
+    def resolved_pubsub_backend(self) -> str:
+        if self.pubsub_backend != "auto":
+            return self.pubsub_backend
+        if self.app_env == "cloud" and self.google_cloud_project:
+            return "google"
+        return "local"
 
 
 @lru_cache

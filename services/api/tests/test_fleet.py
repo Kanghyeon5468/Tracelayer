@@ -1,3 +1,5 @@
+import base64
+import json
 from pathlib import Path
 
 from app.config import Settings
@@ -10,7 +12,13 @@ from app.memory.job_store import LocalInvestigationJobStore
 from app.memory.memory_bank import FirestoreMemoryBank, MemoryBank
 from app.memory.risk_policy_store import LocalRiskPolicyStore
 from app.observability.audit import AuditLedger
-from app.domain.models import ActorRole, ApprovalDecisionRequest, RequestContext, RiskPolicy
+from app.domain.models import (
+    ActorRole,
+    ApprovalDecisionRequest,
+    PubSubPushEnvelope,
+    RequestContext,
+    RiskPolicy,
+)
 from app.security.redaction import redact_case_for_role
 
 
@@ -232,6 +240,30 @@ def test_async_demo_job_persists_status_and_case_id(tmp_path: Path) -> None:
     assert loaded_job.case_id == finished_job.case_id
 
 
+def test_pubsub_push_worker_runs_queued_job(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+
+    job = fleet.enqueue_random_demo()
+    envelope = PubSubPushEnvelope.model_validate(
+        {
+            "message": {
+                "data": base64.b64encode(
+                    json.dumps({"job_id": job.job_id}).encode("utf-8")
+                ).decode("utf-8"),
+                "messageId": "msg-test-worker",
+            },
+            "subscription": "projects/demo/subscriptions/tracelayer-worker",
+        }
+    )
+
+    finished_job = fleet.run_pubsub_investigation_worker(envelope)
+    loaded_job = fleet.get_job(job.job_id)
+
+    assert finished_job.status == "succeeded"
+    assert finished_job.case_id is not None
+    assert loaded_job.case_id == finished_job.case_id
+
+
 def test_viewer_cannot_start_investigation(tmp_path: Path) -> None:
     fleet = _test_fleet(tmp_path)
     viewer = RequestContext(
@@ -353,6 +385,39 @@ def test_approval_log_retains_approved_and_denied_decisions(tmp_path: Path) -> N
     assert log_by_case[approved_case.case_id].case_status == "closed"
     assert log_by_case[denied_case.case_id].approval_status == "denied"
     assert log_by_case[denied_case.case_id].case_status == "open"
+
+
+def test_more_evidence_reruns_agents_and_creates_new_approval(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+    supervisor = RequestContext(
+        actor_id="supervisor@example.com",
+        role=ActorRole.SUPERVISOR,
+        request_id="req-test-more-evidence",
+    )
+
+    case = fleet.investigate("tx-9001", supervisor, create_case_run=True)
+    original_approval_id = case.approval_request.approval_id
+    updated_case = fleet.decide_approval(
+        case.case_id,
+        ApprovalDecisionRequest(
+            approval_id=original_approval_id,
+            decision="more_evidence",
+            reason="Need a refreshed timeline before deciding the hold.",
+        ),
+        supervisor,
+    )
+    approval_log = fleet.list_approval_log(supervisor)
+
+    assert updated_case.status == "needs_approval"
+    assert updated_case.approval_request is not None
+    assert updated_case.approval_request.status == "pending"
+    assert updated_case.approval_request.approval_id.endswith("-r2")
+    assert updated_case.approval_history[0].approval_id == original_approval_id
+    assert updated_case.approval_history[0].status == "more_evidence"
+    assert sum(output.agent_id == "evidence-agent" for output in updated_case.agent_outputs) == 2
+    assert sum(output.agent_id == "compliance-agent" for output in updated_case.agent_outputs) == 2
+    assert any(event.event_type == "human_feedback" for event in updated_case.evidence_timeline)
+    assert {entry.approval_status for entry in approval_log} >= {"more_evidence", "pending"}
 
 
 def test_viewer_case_response_is_redacted(tmp_path: Path) -> None:

@@ -19,6 +19,7 @@ from app.domain.models import (
     InvestigationJob,
     InvestigationRequest,
     PendingApprovalSummary,
+    PubSubPushEnvelope,
     RequestContext,
     RiskPolicy,
 )
@@ -83,6 +84,9 @@ def runtime_config() -> dict[str, str | bool | None]:
         "adk_framework": adk["framework"],
         "adk_model": adk["model"],
         "adk_error": adk["error"],
+        "pubsub_backend": settings.resolved_pubsub_backend,
+        "pubsub_topic_investigations": settings.pubsub_topic_investigations,
+        "pubsub_push_subscription": settings.pubsub_push_subscription,
         "google_cloud_project": settings.google_cloud_project,
         "google_cloud_location": settings.google_cloud_location,
         "secrets_in_browser": False,
@@ -132,6 +136,13 @@ def run_investigation_job(
     request: RequestContext = Depends(get_request_context),
 ) -> InvestigationJob:
     return _run_or_raise(lambda: FraudInvestigationFleet(settings).run_investigation_job(job_id, request))
+
+
+@app.post("/pubsub/investigations", response_model=InvestigationJob)
+def run_pubsub_investigation_worker(envelope: PubSubPushEnvelope) -> InvestigationJob:
+    return _run_or_raise(
+        lambda: FraudInvestigationFleet(settings).run_pubsub_investigation_worker(envelope)
+    )
 
 
 @app.post("/cases/investigate", response_model=InvestigationCase)

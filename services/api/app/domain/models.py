@@ -165,8 +165,20 @@ class ApprovalRequest(BaseModel):
 
 class ApprovalDecisionRequest(BaseModel):
     approval_id: str
-    decision: str = Field(pattern="^(approved|denied)$")
+    decision: str = Field(pattern="^(approved|denied|more_evidence)$")
     reason: str
+
+
+class PubSubPushMessage(BaseModel):
+    data: str
+    message_id: str | None = Field(default=None, alias="messageId")
+    publish_time: str | None = Field(default=None, alias="publishTime")
+    attributes: dict[str, str] = Field(default_factory=dict)
+
+
+class PubSubPushEnvelope(BaseModel):
+    message: PubSubPushMessage
+    subscription: str | None = None
 
 
 class PendingApprovalSummary(BaseModel):
@@ -277,6 +289,7 @@ class InvestigationContext(BaseModel):
     network_links: list[NetworkLink] = Field(default_factory=list)
     compliance_findings: list[ComplianceFinding] = Field(default_factory=list)
     approval_request: ApprovalRequest | None = None
+    approval_history: list[ApprovalRequest] = Field(default_factory=list)
     investigation_plan: InvestigationPlan | None = None
     agent_outputs: list[AgentOutput] = Field(default_factory=list)
     guardrail_findings: list[GuardrailFinding] = Field(default_factory=list)
@@ -303,6 +316,7 @@ class InvestigationCase(BaseModel):
     compliance_findings: list[ComplianceFinding]
     investigation_plan: InvestigationPlan | None = None
     approval_request: ApprovalRequest | None = None
+    approval_history: list[ApprovalRequest] = Field(default_factory=list)
     report_path: str | None = None
     guardrail_findings: list[GuardrailFinding] = Field(default_factory=list)
     federated_risk_signal: FederatedRiskSignal | None = None

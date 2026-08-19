@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import random
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -16,7 +18,7 @@ from app.agents import (
 )
 from app.config import Settings
 from app.connectors.bigquery_network import BigQueryNetworkSearch
-from app.connectors.pubsub import LocalPubSubBus
+from app.connectors.pubsub import PubSubBus, create_pubsub_bus
 from app.connectors.reasoner import GeminiReasoner
 from app.connectors.report_writer import ReportWriter
 from app.connectors.repository import InvestigationRepository
@@ -24,14 +26,17 @@ from app.domain.models import (
     ApprovalDecisionRequest,
     ApprovalLogEntry,
     CaseStatus,
+    EvidenceEvent,
     InvestigationCase,
     InvestigationContext,
     InvestigationJob,
     InvestigationJobStatus,
     PendingApprovalSummary,
     PlanStepStatus,
+    PubSubPushEnvelope,
     RequestContext,
     RiskPolicy,
+    Transaction,
 )
 from app.federation.engine import VeritasFederatedRiskEngine
 from app.gateway.agent_gateway import AgentGateway
@@ -61,7 +66,7 @@ class FraudInvestigationFleet:
         settings: Settings,
         repository: InvestigationRepository | None = None,
         report_writer: ReportWriter | None = None,
-        bus: LocalPubSubBus | None = None,
+        bus: PubSubBus | None = None,
         memory_bank: MemoryBank | FirestoreMemoryBank | None = None,
         job_store: LocalInvestigationJobStore | FirestoreInvestigationJobStore | None = None,
         risk_policy_store: LocalRiskPolicyStore | FirestoreRiskPolicyStore | None = None,
@@ -75,7 +80,7 @@ class FraudInvestigationFleet:
         self.registry = AgentRegistry()
         self.repository = repository or InvestigationRepository()
         self.report_writer = report_writer or ReportWriter()
-        self.bus = bus or LocalPubSubBus()
+        self.bus = bus or create_pubsub_bus(settings)
         self.memory_bank = memory_bank or create_memory_bank(settings)
         self.job_store = job_store or create_job_store(settings)
         self.risk_policy_store = risk_policy_store or create_risk_policy_store(settings)
@@ -115,11 +120,6 @@ class FraudInvestigationFleet:
             case_id=case_id,
             trigger_transaction=trigger,
             customer=customer,
-        )
-
-        self.bus.publish(
-            self.settings.pubsub_topic_investigations,
-            {"case_id": context.case_id, "transaction_id": transaction_id},
         )
 
         policy_text = self.repository.read_policy_text()
@@ -167,6 +167,7 @@ class FraudInvestigationFleet:
             compliance_findings=context.compliance_findings,
             investigation_plan=context.investigation_plan,
             approval_request=context.approval_request,
+            approval_history=context.approval_history,
             guardrail_findings=context.guardrail_findings,
             federated_risk_signal=context.federated_risk_signal,
             audit_chain_tip=context.audit_chain_tip,
@@ -179,13 +180,15 @@ class FraudInvestigationFleet:
         self.report_writer.write_markdown(case)
 
         if case.approval_request:
-            self.bus.publish(
+            self._publish_event(
                 self.settings.pubsub_topic_approvals,
                 {
+                    "event_type": "approval_requested",
                     "case_id": case.case_id,
                     "approval_id": case.approval_request.approval_id,
                     "action": case.approval_request.action,
                 },
+                case.case_id,
             )
 
         final_event = self.audit_ledger.record(
@@ -275,22 +278,39 @@ class FraudInvestigationFleet:
 
         transaction_id = self._choose_demo_transaction_id(transaction_ids)
         job_id = f"job-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}-{uuid4().hex[:8]}"
-        message = self.bus.publish(
-            self.settings.pubsub_topic_investigations,
-            {
-                "job_id": job_id,
-                "transaction_id": transaction_id,
-                "requested_by": request.actor_id,
-            },
-        )
         job = InvestigationJob(
             job_id=job_id,
             status=InvestigationJobStatus.QUEUED,
             transaction_id=transaction_id,
+            pubsub_topic=self.settings.pubsub_topic_investigations,
+            pubsub_message_id="pending-publish",
+        )
+        job = self.job_store.save_job(job)
+
+        try:
+            message = self.bus.publish(
+                self.settings.pubsub_topic_investigations,
+                {
+                    "job_id": job_id,
+                    "transaction_id": transaction_id,
+                    "requested_by": request.actor_id,
+                    "requested_at": datetime.now(UTC).isoformat(),
+                },
+            )
+        except Exception as exc:
+            failed = touch_job(
+                job,
+                status=InvestigationJobStatus.FAILED,
+                error=f"Pub/Sub publish failed: {exc}",
+            )
+            return self.job_store.save_job(failed)
+
+        queued = touch_job(
+            job,
             pubsub_topic=message.topic,
             pubsub_message_id=message.message_id,
         )
-        return self.job_store.save_job(job)
+        return self.job_store.save_job(queued)
 
     def run_investigation_job(
         self,
@@ -301,6 +321,8 @@ class FraudInvestigationFleet:
         job = self.job_store.load_job(job_id)
         if not job:
             raise KeyError(f"Investigation job not found: {job_id}")
+        if job.status == InvestigationJobStatus.SUCCEEDED:
+            return job
         if not job.transaction_id:
             failed = touch_job(
                 job,
@@ -323,6 +345,30 @@ class FraudInvestigationFleet:
             error=None,
         )
         return self.job_store.save_job(succeeded)
+
+    def run_pubsub_investigation_worker(
+        self,
+        envelope: PubSubPushEnvelope,
+        request: RequestContext | None = None,
+    ) -> InvestigationJob:
+        request = request or build_service_context(actor_id="pubsub-worker@tracelayer")
+        payload = self._decode_pubsub_payload(envelope)
+        job_id = payload.get("job_id")
+        if not job_id:
+            raise ValueError("Pub/Sub investigation payload must include job_id.")
+
+        self.audit_ledger.record(
+            request=request,
+            action="jobs.pubsub_push_received",
+            resource=job_id,
+            decision="allow",
+            reason="Authenticated Pub/Sub push delivered an investigation job.",
+            metadata={
+                "subscription": envelope.subscription,
+                "pubsub_message_id": envelope.message.message_id,
+            },
+        )
+        return self.run_investigation_job(job_id, request)
 
     def get_job(
         self,
@@ -419,31 +465,37 @@ class FraudInvestigationFleet:
 
         log_entries: list[ApprovalLogEntry] = []
         for case in self.memory_bank.list_cases():
-            if not case.approval_request:
-                continue
-            approval = case.approval_request
-            log_entries.append(
-                ApprovalLogEntry(
-                    case_id=case.case_id,
-                    approval_id=approval.approval_id,
-                    approval_status=approval.status,
-                    case_status=case.status,
-                    action=approval.action,
-                    reason=approval.reason,
-                    risk_score=case.risk_score,
-                    priority=case.priority,
-                    trigger_transaction_id=case.trigger_transaction_id,
-                    customer_id=case.customer_id,
-                    requested_by_agent_id=approval.requested_by_agent_id,
-                    decided_by=approval.decided_by,
-                    decision_reason=approval.decision_reason,
-                    decided_at=approval.decided_at,
-                    created_at=case.created_at,
-                    updated_at=case.updated_at,
-                    memory_snapshot_id=case.memory_snapshot_id,
+            approvals = [*case.approval_history]
+            if case.approval_request:
+                approvals.append(case.approval_request)
+
+            for approval in approvals:
+                log_entries.append(
+                    ApprovalLogEntry(
+                        case_id=case.case_id,
+                        approval_id=approval.approval_id,
+                        approval_status=approval.status,
+                        case_status=case.status,
+                        action=approval.action,
+                        reason=approval.reason,
+                        risk_score=case.risk_score,
+                        priority=case.priority,
+                        trigger_transaction_id=case.trigger_transaction_id,
+                        customer_id=case.customer_id,
+                        requested_by_agent_id=approval.requested_by_agent_id,
+                        decided_by=approval.decided_by,
+                        decision_reason=approval.decision_reason,
+                        decided_at=approval.decided_at,
+                        created_at=case.created_at,
+                        updated_at=case.updated_at,
+                        memory_snapshot_id=case.memory_snapshot_id,
+                    )
                 )
-            )
-        return log_entries
+        return sorted(
+            self._deduplicate_approval_log(log_entries),
+            key=lambda entry: entry.decided_at or entry.updated_at,
+            reverse=True,
+        )
 
     def decide_approval(
         self,
@@ -471,6 +523,9 @@ class FraudInvestigationFleet:
             raise ValueError(f"Case does not have a pending approval request: {case_id}")
         if case.approval_request.approval_id != decision_request.approval_id:
             raise ValueError("Approval ID does not match the case approval request.")
+
+        if decision_request.decision == "more_evidence":
+            return self._request_more_evidence(case, decision_request, request)
 
         approval = case.approval_request.model_copy(
             update={
@@ -501,6 +556,92 @@ class FraudInvestigationFleet:
             reason="Approval decision persisted to the case memory bank.",
             case_id=case_id,
             metadata={"memory_snapshot_id": memory_snapshot_id},
+        )
+        updated_case = updated_case.model_copy(
+            update={
+                "memory_snapshot_id": memory_snapshot_id,
+                "audit_chain_tip": event.event_hash,
+            }
+        )
+        self.report_writer.write_markdown(updated_case)
+        return updated_case
+
+    def _request_more_evidence(
+        self,
+        case: InvestigationCase,
+        decision_request: ApprovalDecisionRequest,
+        request: RequestContext,
+    ) -> InvestigationCase:
+        if not case.approval_request:
+            raise ValueError(f"Case does not have a pending approval request: {case.case_id}")
+
+        superseded_approval = case.approval_request.model_copy(
+            update={
+                "status": "more_evidence",
+                "decided_by": request.actor_id,
+                "decision_reason": decision_request.reason,
+                "decided_at": datetime.now(UTC),
+            }
+        )
+        context = self._context_from_case(
+            case.model_copy(
+                update={
+                    "approval_request": superseded_approval,
+                    "approval_history": [*case.approval_history, superseded_approval],
+                    "status": CaseStatus.OPEN,
+                }
+            )
+        )
+
+        policy_text = self.repository.read_policy_text()
+        self.gateway.run_agent(
+            EvidenceAgent(self.registry.get("evidence-agent"), policy_text),
+            context,
+            request,
+        )
+        context.evidence_timeline.append(
+            EvidenceEvent(
+                timestamp=datetime.now(UTC),
+                event_type="human_feedback",
+                description=f"Reviewer requested more evidence: {decision_request.reason}",
+                source="human_approval",
+                related_transaction_id=context.trigger_transaction.transaction_id,
+            )
+        )
+        context.evidence_timeline = sorted(
+            context.evidence_timeline,
+            key=lambda event: event.timestamp,
+        )
+        self.gateway.run_agent(
+            ComplianceAgent(self.registry.get("compliance-agent")),
+            context,
+            request,
+        )
+        self.gateway.run_agent(
+            CaseManagerAgent(self.registry.get("case-manager-agent"), self.adk_runtime),
+            context,
+            request,
+        )
+
+        updated_case = self._case_from_context(context, case.created_at)
+        report_path = self.report_writer.path_for(updated_case.case_id)
+        updated_case = updated_case.model_copy(update={"report_path": str(report_path)})
+        memory_snapshot_id = self.memory_bank.save_case(updated_case)
+        event = self.audit_ledger.record(
+            request=request,
+            action="approvals.request_more_evidence",
+            resource=decision_request.approval_id,
+            decision="allow",
+            reason="Human feedback reran Evidence, Compliance, and Case Manager agents.",
+            case_id=case.case_id,
+            metadata={
+                "memory_snapshot_id": memory_snapshot_id,
+                "new_approval_id": (
+                    updated_case.approval_request.approval_id
+                    if updated_case.approval_request
+                    else None
+                ),
+            },
         )
         updated_case = updated_case.model_copy(
             update={
@@ -555,3 +696,127 @@ class FraudInvestigationFleet:
             }
         )
         return self.risk_policy_store.save_policy(saved_policy)
+
+    def _context_from_case(self, case: InvestigationCase) -> InvestigationContext:
+        trigger = self.repository.get_transaction(case.trigger_transaction_id)
+        customer = self.repository.get_customer(case.customer_id)
+        return InvestigationContext(
+            case_id=case.case_id,
+            trigger_transaction=trigger,
+            customer=customer,
+            related_transactions=self._related_transactions_from_case(case, trigger),
+            risk_score=case.risk_score,
+            priority=case.priority,
+            evidence_timeline=list(case.evidence_timeline),
+            network_links=list(case.network_links),
+            compliance_findings=list(case.compliance_findings),
+            approval_request=case.approval_request,
+            approval_history=list(case.approval_history),
+            investigation_plan=case.investigation_plan,
+            agent_outputs=list(case.agent_outputs),
+            guardrail_findings=list(case.guardrail_findings),
+            federated_risk_signal=case.federated_risk_signal,
+            status=case.status,
+            memory_snapshot_id=case.memory_snapshot_id,
+            audit_chain_tip=case.audit_chain_tip,
+        )
+
+    def _case_from_context(
+        self,
+        context: InvestigationContext,
+        created_at: datetime,
+    ) -> InvestigationCase:
+        return InvestigationCase(
+            case_id=context.case_id,
+            status=context.status,
+            trigger_transaction_id=context.trigger_transaction.transaction_id,
+            customer_id=context.customer.customer_id,
+            risk_score=context.risk_score,
+            priority=context.priority,
+            agent_outputs=context.agent_outputs,
+            network_links=context.network_links,
+            evidence_timeline=context.evidence_timeline,
+            compliance_findings=context.compliance_findings,
+            investigation_plan=context.investigation_plan,
+            approval_request=context.approval_request,
+            approval_history=context.approval_history,
+            guardrail_findings=context.guardrail_findings,
+            federated_risk_signal=context.federated_risk_signal,
+            memory_snapshot_id=context.memory_snapshot_id,
+            audit_chain_tip=context.audit_chain_tip,
+            created_at=created_at,
+            updated_at=datetime.now(UTC),
+        )
+
+    def _related_transactions_from_case(
+        self,
+        case: InvestigationCase,
+        trigger: Transaction,
+    ) -> list[Transaction]:
+        transaction_ids = {
+            link.evidence_transaction_id
+            for link in case.network_links
+            if link.evidence_transaction_id != trigger.transaction_id
+        }
+        for event in case.evidence_timeline:
+            if event.related_transaction_id and event.related_transaction_id != trigger.transaction_id:
+                transaction_ids.add(event.related_transaction_id)
+
+        related_transactions: list[Transaction] = []
+        for transaction_id in sorted(transaction_ids):
+            try:
+                related_transactions.append(self.repository.get_transaction(transaction_id))
+            except KeyError:
+                continue
+        return related_transactions
+
+    def _publish_event(
+        self,
+        topic: str,
+        payload: dict,
+        case_id: str | None = None,
+    ) -> None:
+        try:
+            message = self.bus.publish(topic, payload)
+        except Exception as exc:
+            self.audit_ledger.record(
+                request=build_service_context(actor_id="pubsub-publisher@tracelayer"),
+                action="pubsub.publish",
+                resource=topic,
+                decision="deny",
+                reason=f"Pub/Sub publish failed: {exc}",
+                case_id=case_id,
+                metadata={"payload_type": payload.get("event_type")},
+            )
+            return
+
+        self.audit_ledger.record(
+            request=build_service_context(actor_id="pubsub-publisher@tracelayer"),
+            action="pubsub.publish",
+            resource=topic,
+            decision="allow",
+            reason="Event published to Pub/Sub.",
+            case_id=case_id,
+            metadata={
+                "message_id": message.message_id,
+                "payload_type": payload.get("event_type"),
+            },
+        )
+
+    @staticmethod
+    def _decode_pubsub_payload(envelope: PubSubPushEnvelope) -> dict:
+        try:
+            decoded = base64.b64decode(envelope.message.data).decode("utf-8")
+            payload = json.loads(decoded)
+        except Exception as exc:
+            raise ValueError("Invalid Pub/Sub push payload.") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("Pub/Sub push payload must decode to a JSON object.")
+        return payload
+
+    @staticmethod
+    def _deduplicate_approval_log(entries: list[ApprovalLogEntry]) -> list[ApprovalLogEntry]:
+        latest_by_key: dict[tuple[str, str, str], ApprovalLogEntry] = {}
+        for entry in entries:
+            latest_by_key[(entry.case_id, entry.approval_id, entry.approval_status)] = entry
+        return list(latest_by_key.values())

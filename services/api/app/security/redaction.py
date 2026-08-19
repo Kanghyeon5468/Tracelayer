@@ -49,6 +49,11 @@ def redact_case_for_role(case: InvestigationCase, role: ActorRole) -> Investigat
                 for finding in case.compliance_findings
             ],
             "approval_request": _redact_approval(case.approval_request, guardrail),
+            "approval_history": [
+                redacted
+                for approval in case.approval_history
+                if (redacted := _redact_approval(approval, guardrail)) is not None
+            ],
         }
     )
 

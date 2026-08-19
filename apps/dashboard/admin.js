@@ -269,10 +269,13 @@ const selectCase = async (caseId) => {
 };
 
 const decideApproval = async (approval, decision) => {
-  const reason =
-    decision === "approved"
-      ? "Supervisor approved the recommended high-risk action from the admin console."
-      : "Supervisor denied the recommended high-risk action from the admin console.";
+  const reasons = {
+    approved: "Supervisor approved the recommended high-risk action from the admin console.",
+    denied: "Supervisor denied the recommended high-risk action from the admin console.",
+    more_evidence:
+      "Supervisor requested additional evidence before deciding the recommended action.",
+  };
+  const reason = reasons[decision];
 
   const updatedCase = await apiFetch(`/cases/${approval.case_id}/approval`, {
     method: "POST",
@@ -329,11 +332,15 @@ const renderApprovalQueue = () => {
     approveButton.type = "button";
     approveButton.addEventListener("click", () => decideApproval(approval, "approved"));
 
+    const evidenceButton = createNode("button", "secondary", "More Evidence");
+    evidenceButton.type = "button";
+    evidenceButton.addEventListener("click", () => decideApproval(approval, "more_evidence"));
+
     const denyButton = createNode("button", "danger", "Deny");
     denyButton.type = "button";
     denyButton.addEventListener("click", () => decideApproval(approval, "denied"));
 
-    actions.append(viewButton, approveButton, denyButton);
+    actions.append(viewButton, approveButton, evidenceButton, denyButton);
     row.append(body, actions);
     queue.appendChild(row);
   });
@@ -397,7 +404,7 @@ const renderSelectedCase = () => {
 const updateSummary = () => {
   const pendingCount = adminState.pendingApprovals.length;
   const completedCount = adminState.approvalLog.filter((entry) =>
-    ["approved", "denied"].includes(entry.approval_status),
+    ["approved", "denied", "more_evidence"].includes(entry.approval_status),
   ).length;
   const highestRisk = adminState.pendingApprovals.reduce(
     (max, approval) => Math.max(max, approval.risk_score),

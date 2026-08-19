@@ -176,6 +176,7 @@ const API_BASE_URL =
   inferredApiBaseUrl;
 
 let currentCaseId = localStorage.getItem("tracelayer.currentCaseId") || fallbackCase.case_id;
+let runtimeConfig = { pubsub_backend: "local" };
 const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("tracelayer-live") : null;
 
 const titleCase = (value) =>
@@ -408,9 +409,11 @@ const loadRuntimeConfig = async () => {
       throw new Error(`API returned ${response.status}`);
     }
     const config = await response.json();
+    runtimeConfig = config;
     const live = status.dataset.liveStatus || "Live sync: ready";
     const adk = config.adk_available ? "Google ADK" : "local agent runtime";
-    status.dataset.backendStatus = `Backend: ${config.ai_provider} / ${config.gemini_model} · ${adk}`;
+    const pubsub = config.pubsub_backend === "google" ? "Pub/Sub push" : "local worker";
+    status.dataset.backendStatus = `Backend: ${config.ai_provider} / ${config.gemini_model} · ${adk} · ${pubsub}`;
     status.textContent = `${status.dataset.backendStatus} · ${live}`;
   } catch (error) {
     status.textContent = "Backend: local fallback";
@@ -504,9 +507,13 @@ const runAsyncDemo = async () => {
     }
     const job = await response.json();
     renderAsyncJob(job);
-    runQueuedJob(job.job_id)
-      .then(() => pollJob(job.job_id))
-      .catch(() => pollJob(job.job_id).catch(() => {}));
+    if (runtimeConfig.pubsub_backend === "google") {
+      pollJob(job.job_id).catch(() => {});
+    } else {
+      runQueuedJob(job.job_id)
+        .then(() => pollJob(job.job_id))
+        .catch(() => pollJob(job.job_id).catch(() => {}));
+    }
   } catch (error) {
     renderAsyncJob({
       job_id: "local-fallback",
