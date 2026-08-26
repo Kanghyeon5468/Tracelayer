@@ -203,6 +203,17 @@ const renderAdkRuntime = (runtime) => {
   return `<p class="muted-line">Runtime: ${label}${model}${agent}${tool}${session}</p>`;
 };
 
+const renderPlannerRuntime = (runtime) => {
+  if (!runtime) {
+    return "";
+  }
+  const state = runtime.gemini_proposal_used ? "Gemini plan accepted" : "Policy fallback";
+  const source = runtime.proposal_source ? ` · ${runtime.proposal_source}` : "";
+  const validation = runtime.validation_status ? ` · ${titleCase(runtime.validation_status)}` : "";
+  const fallback = runtime.fallback_strategy ? ` · fallback ${titleCase(runtime.fallback_strategy)}` : "";
+  return `<p class="muted-line">Planner: ${state}${source}${validation}${fallback}</p>`;
+};
+
 const renderModelArmorDemo = (demo) => {
   if (!demo?.external_input_present) {
     return "";
@@ -324,10 +335,10 @@ const mountNetworkGraph3d = (graph) => {
 
 const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf8fbfe);
+  scene.background = new THREE.Color(0x06101b);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.set(0, 0.6, 10.4);
+  camera.position.set(0, 1.0, 15.6);
 
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -338,8 +349,8 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
   viewport.replaceChildren(renderer.domElement);
 
   const graphGroup = new THREE.Group();
-  graphGroup.rotation.x = -0.24;
-  graphGroup.rotation.y = 0.48;
+  graphGroup.rotation.x = -0.38;
+  graphGroup.rotation.y = 0.72;
   scene.add(graphGroup);
 
   const ambientLight = new THREE.AmbientLight(0xffffff, 1.45);
@@ -393,7 +404,7 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
     graphGroup.add(mesh);
 
     const label = createLabelSprite(THREE, node.label);
-    label.position.copy(node.position).add(new THREE.Vector3(0, -0.5, 0));
+    label.position.copy(node.position).add(new THREE.Vector3(0, -0.68, 0));
     graphGroup.add(label);
   });
 
@@ -446,12 +457,12 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
   };
   const onWheel = (event) => {
     event.preventDefault();
-    camera.position.z = Math.max(5.8, Math.min(14, camera.position.z + event.deltaY * 0.007));
+    camera.position.z = Math.max(9.2, Math.min(24, camera.position.z + event.deltaY * 0.008));
   };
   const onReset = () => {
-    controls.targetRotationX = -0.24;
-    controls.targetRotationY = 0.48;
-    camera.position.set(0, 0.6, 10.4);
+    controls.targetRotationX = -0.38;
+    controls.targetRotationY = 0.72;
+    camera.position.set(0, 1.0, 15.6);
     updateGraphSelection(selection, null, graph);
   };
   const resetButton = document.querySelector("#reset-graph-view");
@@ -495,42 +506,45 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
 };
 
 const positionGraphNodes3d = (THREE, nodes) => {
+  if (!nodes.length) {
+    return [];
+  }
   const trigger = nodes.find((node) => node.type === "trigger_transaction") || nodes[0];
   const others = nodes.filter((node) => node.id !== trigger.id);
   const relatedNodes = others.filter((node) => node.type === "related_transaction");
   const entityNodes = others.filter((node) => node.type !== "related_transaction");
-  const relatedRadius = 3.45 + Math.min(relatedNodes.length, 10) * 0.05;
-  const entityRadius = 2.25 + Math.min(entityNodes.length, 10) * 0.04;
+  const orderedNodes = [...relatedNodes, ...entityNodes];
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const scatterPosition = (index, total, radius, phase) => {
+    const count = Math.max(total, 1);
+    const t = count === 1 ? 0.5 : index / (count - 1);
+    const unitY = 1 - t * 2;
+    const ring = Math.sqrt(Math.max(0, 1 - unitY * unitY));
+    const theta = index * goldenAngle + phase;
+    return new THREE.Vector3(
+      Math.cos(theta) * ring * radius * 1.12,
+      unitY * radius * 0.88,
+      Math.sin(theta) * ring * radius * 1.18,
+    );
+  };
   const positioned = [
     {
       ...trigger,
-      position: new THREE.Vector3(0, 0, 0),
+      position: new THREE.Vector3(0, 0, 0.35),
     },
   ];
 
-  relatedNodes.forEach((node, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(relatedNodes.length, 1) - Math.PI / 2;
+  orderedNodes.forEach((node, index) => {
+    const isRelated = node.type === "related_transaction";
+    const radius = (isRelated ? 5.8 : 4.85) + (index % 4) * 0.42;
+    const phase = isRelated ? 0.35 : 1.95;
+    const position = scatterPosition(index, orderedNodes.length, radius, phase);
+    position.x += ((index % 3) - 1) * 0.28;
+    position.y += isRelated ? 0.32 : -0.24;
+    position.z += ((index % 5) - 2) * 0.55;
     positioned.push({
       ...node,
-      position: new THREE.Vector3(
-        Math.cos(angle) * relatedRadius,
-        Math.sin(angle) * relatedRadius * 0.74,
-        Math.sin(angle * 1.6) * 1.35,
-      ),
-    });
-  });
-
-  entityNodes.forEach((node, index) => {
-    const angle =
-      (Math.PI * 2 * index) / Math.max(entityNodes.length, 1) +
-      Math.PI / Math.max(entityNodes.length, 2);
-    positioned.push({
-      ...node,
-      position: new THREE.Vector3(
-        Math.cos(angle) * entityRadius,
-        Math.sin(angle) * entityRadius * 0.68,
-        Math.cos(angle * 1.5) * 0.95,
-      ),
+      position,
     });
   });
   return positioned;
@@ -551,22 +565,22 @@ const createLabelSprite = (THREE, label) => {
   canvas.width = 256;
   canvas.height = 64;
   const context = canvas.getContext("2d");
-  context.fillStyle = "rgba(255, 255, 255, 0.88)";
-  context.strokeStyle = "rgba(215, 222, 232, 0.96)";
+  context.fillStyle = "rgba(9, 24, 39, 0.94)";
+  context.strokeStyle = "rgba(47, 147, 255, 0.48)";
   context.lineWidth = 3;
   context.beginPath();
   context.roundRect(4, 8, 248, 44, 10);
   context.fill();
   context.stroke();
-  context.fillStyle = "#17202a";
-  context.font = "700 24px Inter, system-ui, sans-serif";
+  context.fillStyle = "#edf6ff";
+  context.font = "700 27px Inter, system-ui, sans-serif";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(String(label).slice(0, 22), 128, 31);
+  context.fillText(String(label).slice(0, 20), 128, 31);
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(1.15, 0.29, 1);
+  sprite.scale.set(1.06, 0.28, 1);
   return sprite;
 };
 
@@ -710,6 +724,34 @@ const renderAsyncJob = (job) => {
   `;
 };
 
+const renderInvestigationProgress = (plan) => {
+  const progress = document.querySelector("#investigation-progress");
+  if (!progress) {
+    return;
+  }
+  const steps = plan?.steps?.length
+    ? plan.steps.filter((step) => step.action !== "replan_after_triage")
+    : [
+        { action: "score_transaction", status: "planned", agent_id: "triage-agent" },
+        { action: "search_related_transactions", status: "planned", agent_id: "network-agent" },
+        { action: "build_evidence_timeline", status: "planned", agent_id: "evidence-agent" },
+        { action: "check_policy_and_pii", status: "planned", agent_id: "compliance-agent" },
+        { action: "request_supervisor_approval", status: "planned", agent_id: "case-manager-agent" },
+      ];
+
+  progress.innerHTML = steps
+    .map(
+      (step) => `
+        <div class="progress-step ${step.status}">
+          <span></span>
+          <strong>${titleCase(step.action)}</strong>
+          <p>${titleCase(step.status)} · ${titleCase(step.agent_id)}</p>
+        </div>
+      `,
+    )
+    .join("");
+};
+
 const renderAgentRegistry = (agents) => {
   document.querySelector("#agent-registry").innerHTML = agents
     .map(
@@ -741,6 +783,7 @@ const renderCase = (caseData) => {
   document.querySelector("#risk-score").textContent = caseData.risk_score;
   document.querySelector("#priority").textContent = titleCase(caseData.priority);
   document.querySelector("#audit-tip").textContent = caseData.audit_chain_tip ? "Recorded" : "Pending";
+  renderInvestigationProgress(caseData.investigation_plan);
 
   document.querySelector("#agent-findings").innerHTML = caseData.agent_outputs
     .map(
@@ -748,6 +791,7 @@ const renderCase = (caseData) => {
         <div class="item">
           <strong>${titleCase(item.agent_id)}</strong>
           <p>${item.summary}</p>
+          ${renderPlannerRuntime(item.data?.planner_runtime)}
           ${renderModelArmorDemo(item.data?.model_armor_demo)}
           ${renderAdkRuntime(item.data?.adk_runtime)}
         </div>

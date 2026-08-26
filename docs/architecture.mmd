@@ -5,7 +5,11 @@ flowchart LR
     API --> Gateway[Agent Gateway and Policy Layer]
     Gateway --> Registry[Agent Registry]
     Gateway --> Policy[Policy Engine]
-    Gateway --> Planner[Case Manager Dynamic Planner]
+    Gateway --> Planner[Case Manager Gemini Planner]
+    Planner --> Gemini[Gemini 3.5 Flash via Vertex AI]
+    Planner --> PlanProposal[Structured JSON Plan Proposal]
+    PlanProposal --> Policy
+    Policy --> ApprovedPlan[Validated Investigation Plan]
     Gateway --> ADK[Google ADK Runner and Session]
     Gateway --> Memory[Firestore or Append-only Memory Bank]
     Gateway --> Armor[Model Armor Guardrails]
@@ -14,13 +18,13 @@ flowchart LR
     Gateway --> PubSub[Pub/Sub Investigation Jobs]
     PubSub --> Worker[Authenticated Push Worker]
     Worker --> Planner
-    Planner --> ADK
+    ApprovedPlan --> ADK
+    ApprovedPlan --> Evidence[Evidence Agent]
+    ApprovedPlan --> Compliance[Compliance Agent]
     ADK --> Triage[Triage Tool]
     ADK --> Network[Network Tool]
-    Planner --> Evidence[Evidence Agent]
-    Planner --> Compliance[Compliance Agent]
     ADK --> CaseManager[Case Manager Tool]
-    Triage --> Gemini[Gemini 3 Flash Preview via Vertex AI]
+    Triage --> Gemini
     Triage --> Veritas
     Network --> BigQuery[BigQuery Related Transactions]
     Network --> Graph[3D Network Graph and Campaign Detection]

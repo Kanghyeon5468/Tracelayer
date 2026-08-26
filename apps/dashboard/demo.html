@@ -4,10 +4,32 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TraceLayer Prompt Demo</title>
-    <link rel="stylesheet" href="./styles.css?v=20260820-prompt-demo" />
+    <link rel="stylesheet" href="./styles.css?v=20260827-compact-graph" />
   </head>
-  <body>
-    <main class="shell demo-shell">
+  <body class="app-body">
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="TraceLayer navigation">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">TL</span>
+          <span>TraceLayer</span>
+        </a>
+        <nav class="side-nav">
+          <a href="./index.html">Dashboard</a>
+          <a class="active" href="./demo.html">Prompt Demo</a>
+          <a href="./index.html#campaign-detection">Campaigns</a>
+          <a href="./index.html#agent-registry">Agent Registry</a>
+          <a href="./index.html#guardrails">Security</a>
+          <a href="./admin.html">Admin</a>
+        </nav>
+        <div class="side-status" aria-label="System status">
+          <span>System Online</span>
+          <span>Vertex AI</span>
+          <span>Cloud Run</span>
+          <span>Pub/Sub</span>
+        </div>
+      </aside>
+
+      <section class="workspace demo-shell">
       <header class="topbar">
         <div>
           <p class="eyebrow">Prompt Scenario Lab</p>
@@ -64,8 +86,9 @@
           <div id="demo-agent-findings" class="stack empty-state">Run a scenario to inspect agent output.</div>
         </article>
       </section>
+      </section>
     </main>
-    <script src="./config.js?v=20260820-prompt-demo"></script>
-    <script src="./demo.js?v=20260820-prompt-demo"></script>
+    <script src="./config.js?v=20260827-compact-graph"></script>
+    <script src="./demo.js?v=20260827-compact-graph"></script>
   </body>
 </html>

@@ -4,10 +4,32 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TraceLayer Dashboard</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260827-compact-graph" />
   </head>
-  <body>
-    <main class="shell">
+  <body class="app-body">
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="TraceLayer navigation">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">TL</span>
+          <span>TraceLayer</span>
+        </a>
+        <nav class="side-nav">
+          <a class="active" href="./index.html">Dashboard</a>
+          <a href="./demo.html">Prompt Demo</a>
+          <a href="#campaign-detection">Campaigns</a>
+          <a href="#agent-registry">Agent Registry</a>
+          <a href="#guardrails">Security</a>
+          <a href="./admin.html">Admin</a>
+        </nav>
+        <div class="side-status" aria-label="System status">
+          <span>System Online</span>
+          <span>Vertex AI</span>
+          <span>Cloud Run</span>
+          <span>Pub/Sub</span>
+        </div>
+      </aside>
+
+      <section class="workspace">
       <header class="topbar">
         <div>
           <p class="eyebrow">Fortified Enterprise Fleet</p>
@@ -45,7 +67,40 @@
         </div>
       </section>
 
-      <section class="grid">
+      <section class="panel progress-panel">
+        <h2>Investigation Progress</h2>
+        <div id="investigation-progress" class="progress-track"></div>
+      </section>
+
+      <section class="dashboard-grid">
+        <div class="main-column">
+          <article class="panel wide">
+            <h2>Live Network Graph</h2>
+            <div id="network-graph" class="network-graph"></div>
+          </article>
+
+          <article class="panel wide">
+            <h2>Fraud Campaign Detection</h2>
+            <div id="campaign-detection" class="campaign-detection"></div>
+          </article>
+
+          <article class="panel wide">
+            <h2>Embedded Veritas Federation</h2>
+            <div id="federated-signal" class="federated"></div>
+          </article>
+
+          <article class="panel wide">
+            <h2>Evidence Timeline</h2>
+            <div id="timeline" class="timeline"></div>
+          </article>
+
+          <article class="panel wide">
+            <h2>Agent Registry</h2>
+            <div id="agent-registry" class="registry-grid"></div>
+          </article>
+        </div>
+
+        <aside class="right-rail">
         <article class="panel">
           <h2>Agent Findings</h2>
           <div id="agent-findings" class="stack"></div>
@@ -59,26 +114,6 @@
         <article class="panel">
           <h2>Network Links</h2>
           <div id="network-links" class="stack"></div>
-        </article>
-
-        <article class="panel wide">
-          <h2>Live Network Graph</h2>
-          <div id="network-graph" class="network-graph"></div>
-        </article>
-
-        <article class="panel wide">
-          <h2>Fraud Campaign Detection</h2>
-          <div id="campaign-detection" class="campaign-detection"></div>
-        </article>
-
-        <article class="panel wide">
-          <h2>Embedded Veritas Federation</h2>
-          <div id="federated-signal" class="federated"></div>
-        </article>
-
-        <article class="panel wide">
-          <h2>Evidence Timeline</h2>
-          <div id="timeline" class="timeline"></div>
         </article>
 
         <article class="panel">
@@ -105,14 +140,11 @@
             </div>
           </div>
         </article>
-
-        <article class="panel wide">
-          <h2>Agent Registry</h2>
-          <div id="agent-registry" class="registry-grid"></div>
-        </article>
+        </aside>
+      </section>
       </section>
     </main>
-    <script src="./config.js"></script>
-    <script src="./app.js"></script>
+    <script src="./config.js?v=20260827-compact-graph"></script>
+    <script src="./app.js?v=20260827-compact-graph"></script>
   </body>
 </html>

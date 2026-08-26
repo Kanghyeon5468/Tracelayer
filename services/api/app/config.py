@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     adk_enabled: bool = True
     adk_model: str | None = None
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-3-flash-preview"
+    gemini_model: str = "gemini-3.5-flash"
     google_cloud_project: str | None = None
     google_cloud_location: str = "global"
     firestore_database: str = "(default)"

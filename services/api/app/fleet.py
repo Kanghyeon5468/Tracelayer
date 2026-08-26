@@ -175,6 +175,7 @@ class FraudInvestigationFleet:
         planning_agent = CaseManagerPlanningAgent(
             self.registry.get("case-manager-agent"),
             self.adk_runtime,
+            self.reasoner,
         )
 
         self.gateway.run_agent(planning_agent, context, request)

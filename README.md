@@ -26,8 +26,8 @@ A bank can benefit from fraud patterns learned across a federation without seein
 | Dashboard | `/dashboard` shows case summary, generated investigation plan, agent findings, ADK Runner metadata, privacy-separated federated risk, 3D network graph, campaign detection, compliance, approval state, async job state, and Agent Registry. |
 | Admin Console | `/admin` lists pending approvals and approval history. Supervisors can approve, deny, request more evidence, and save risk thresholds. |
 | Google ADK | Triage, Network, Campaign Trace, and Case Manager tools run through `google.adk.runners.Runner` with `InMemorySessionService` when ADK is available. |
-| Dynamic Planning | Case Manager creates an initial triage-first plan, replans after Triage, and can replan again after Network detects a campaign cluster. |
-| Vertex AI Gemini | Backend-only Gemini access is supported through Vertex AI using `gemini-3-flash-preview`. |
+| Gemini Planning | Case Manager asks Gemini for a structured JSON investigation plan after Triage and post-Network findings, then validates it against policy before execution. |
+| Vertex AI Gemini | Backend-only Gemini access is supported through Vertex AI using `gemini-3.5-flash`. |
 | Firestore | Persists case snapshots, approvals, risk policy, and async investigation jobs in deployed mode. |
 | Pub/Sub | Async jobs publish to Pub/Sub; an authenticated push subscription invokes `/pubsub/investigations` on Cloud Run. |
 | BigQuery | `BigQueryNetworkSearch` performs parameterized related-transaction search when configured, with deterministic local fallback metadata. |
@@ -59,7 +59,7 @@ Approved TraceLayer Tool
 Case State + Audit + Cloud Logging
 ```
 
-TraceLayer does not blindly run every agent in the same order. The Case Manager generates a plan, the Agent Gateway authorizes each selected tool, and ADK Runner wraps approved core tool execution.
+TraceLayer does not blindly run every agent in the same order. The Case Manager asks Gemini for a structured plan proposal, validates the proposed actions against a policy allowlist and case-risk constraints, then the Agent Gateway authorizes each selected tool and ADK Runner wraps approved core tool execution.
 
 ## Agentic Planning
 
@@ -90,13 +90,13 @@ Current strategies:
 | `campaign_escalation_replan` | Network finds a strong campaign cluster. | Triage -> Federated Intelligence -> Network -> Trace Cluster Funds -> Evidence -> Compliance -> Supervisor Approval |
 | `pause_for_more_data` | Required transaction data is missing. | Triage -> Request More Data -> Pause |
 
-The post-network replan is the important agentic behavior: if the Network Agent finds a clustered campaign pattern, the Case Manager inserts `trace_cluster_funds` before evidence writing and approval.
+The post-network replan is the important agentic behavior: Gemini proposes the next plan from case state, available agents, allowed actions, evidence availability, and policy constraints. If the Network Agent finds a clustered campaign pattern, the validated plan inserts `trace_cluster_funds` before evidence writing and approval. If Gemini proposes an unapproved or unsafe path, TraceLayer rejects it and falls back to the deterministic policy baseline.
 
 ## Agent Fleet
 
 | Agent | Responsibility |
 | --- | --- |
-| Case Manager Planning Agent | Creates the initial plan, replans after Triage, and can replan after Network campaign findings. |
+| Case Manager Planning Agent | Requests Gemini structured plan proposals, validates them against policy constraints, creates the initial plan, replans after Triage, and can replan after Network campaign findings. |
 | Triage Agent | Scores suspicious activity, assigns priority, consumes federated intelligence, and calls Gemini through the backend model boundary. |
 | Network Agent | Searches related transactions, builds shared-entity graph data, and detects possible fraud campaigns. |
 | Campaign Trace Agent | Traces clustered fund movement after adaptive replanning. |
@@ -470,7 +470,7 @@ See [.env.example](.env.example) for the full local template.
 | `USE_MOCK_DATA` | Keeps demo data deterministic. |
 | `AI_PROVIDER` | Selects `mock`, `gemini_api`, `vertex_ai`, or `auto`. |
 | `GEMINI_API_KEY` | Enables backend-only Gemini API mode. |
-| `GEMINI_MODEL` | Defaults to `gemini-3-flash-preview`. |
+| `GEMINI_MODEL` | Defaults to `gemini-3.5-flash`. |
 | `GOOGLE_CLOUD_PROJECT` | Project for Cloud Run, Vertex AI, Firestore, Pub/Sub, and BigQuery. |
 | `GOOGLE_CLOUD_LOCATION` | Vertex AI region. |
 | `ADK_ENABLED` | Enables Google ADK definitions and Runner-backed tool execution. |
@@ -500,7 +500,8 @@ See [.env.example](.env.example) for the full local template.
 Cloud Run backend
 Vertex AI Gemini backend boundary
 Google ADK Runner-backed core tool execution
-Dynamic post-triage and post-network planning
+Gemini structured planner with policy validation
+Dynamic post-triage and post-network replanning
 Campaign trace follow-up action
 Firestore case, job, approval, and policy persistence
 Pub/Sub publisher and authenticated push worker

@@ -4,10 +4,32 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TraceLayer Admin</title>
-    <link rel="stylesheet" href="./styles.css?v=20260813-risk-policy-feedback" />
+    <link rel="stylesheet" href="./styles.css?v=20260827-dark-console" />
   </head>
-  <body>
-    <main class="shell admin-shell">
+  <body class="app-body">
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="TraceLayer navigation">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">TL</span>
+          <span>TraceLayer</span>
+        </a>
+        <nav class="side-nav">
+          <a href="./index.html">Dashboard</a>
+          <a href="./demo.html">Prompt Demo</a>
+          <a href="./index.html#campaign-detection">Campaigns</a>
+          <a href="./index.html#agent-registry">Agent Registry</a>
+          <a href="./index.html#guardrails">Security</a>
+          <a class="active" href="./admin.html">Admin</a>
+        </nav>
+        <div class="side-status" aria-label="System status">
+          <span>System Online</span>
+          <span>Vertex AI</span>
+          <span>Cloud Run</span>
+          <span>Pub/Sub</span>
+        </div>
+      </aside>
+
+      <section class="workspace admin-shell">
       <header class="topbar">
         <div>
           <p class="eyebrow">Supervisor Console</p>
@@ -92,8 +114,9 @@
           <div id="approval-log" class="approval-log"></div>
         </article>
       </section>
+      </section>
     </main>
-    <script src="./config.js?v=20260813-risk-policy-feedback"></script>
-    <script src="./admin.js?v=20260813-risk-policy-feedback"></script>
+    <script src="./config.js?v=20260827-dark-console"></script>
+    <script src="./admin.js?v=20260827-dark-console"></script>
   </body>
 </html>

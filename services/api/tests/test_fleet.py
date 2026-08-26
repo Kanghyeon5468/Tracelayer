@@ -250,10 +250,22 @@ def test_case_manager_generates_initial_plan_before_triage(tmp_path: Path) -> No
     fleet = _test_fleet(tmp_path)
 
     case = fleet.investigate("tx-9001", create_case_run=True)
+    post_triage_plan = next(
+        output
+        for output in case.agent_outputs
+        if output.agent_id == "case-manager-agent"
+        and output.data.get("plan_phase") == "post_triage_replan"
+    )
+    planner_runtime = post_triage_plan.data["planner_runtime"]
 
     assert case.agent_outputs[0].agent_id == "case-manager-agent"
     assert case.agent_outputs[0].data["plan_phase"] == "initial_plan"
     assert case.agent_outputs[1].agent_id == "triage-agent"
+    assert post_triage_plan.data["planning_action"] == "gemini_validated_investigation_plan"
+    assert planner_runtime["mode"] == "gemini_structured_planner"
+    assert planner_runtime["proposal_source"] == "mock_gemini_planner"
+    assert planner_runtime["gemini_proposal_used"] is True
+    assert planner_runtime["validation_status"] == "approved"
     assert any(
         output.data.get("plan_phase") == "post_triage_replan"
         for output in case.agent_outputs
@@ -363,7 +375,7 @@ def test_core_agents_record_google_adk_runtime_metadata(tmp_path: Path) -> None:
     for runtime in runtime_by_agent.values():
         assert runtime["enabled"] is True
         assert runtime["framework"] == "google_adk"
-        assert runtime["model"] == "gemini-3-flash-preview" or runtime["available"] is False
+        assert runtime["model"] == "gemini-3.5-flash" or runtime["available"] is False
         assert runtime["tool_invoked"] is True
         assert runtime["execution_mode"] in {"adk_runner", "python_fallback"}
 
@@ -638,7 +650,11 @@ def _test_fleet(
     tmp_path: Path,
     repository: InvestigationRepository | None = None,
 ) -> FraudInvestigationFleet:
-    settings = Settings(network_search_backend="local", gemini_model="gemini-3-flash-preview")
+    settings = Settings(
+        ai_provider="mock",
+        network_search_backend="local",
+        gemini_model="gemini-3.5-flash",
+    )
     return FraudInvestigationFleet(
         settings,
         repository=repository,

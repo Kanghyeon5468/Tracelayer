@@ -23,7 +23,7 @@ spec:
             - name: AI_PROVIDER
               value: vertex_ai
             - name: GEMINI_MODEL
-              value: gemini-3-flash-preview
+              value: gemini-3.5-flash
             - name: GOOGLE_CLOUD_PROJECT
               value: PROJECT_ID
             - name: GOOGLE_CLOUD_LOCATION
