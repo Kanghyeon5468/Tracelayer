@@ -260,20 +260,74 @@ const renderNetworkGraph = (graph) => {
   }
 
   const nodes = graph.nodes.slice(0, 18);
+  const edgeCount = (graph.edges || []).length;
   return `
-    <div class="network-graph-stage">
-      <div class="network-graph-viewport" aria-label="Interactive 3D fraud network graph"></div>
-      <aside class="graph-selection">
-        <span>Selected Node</span>
-        <strong>Network Overview</strong>
-        <p>${nodes.length} nodes · ${(graph.edges || []).length} edges · ${titleCase(graph.layout)}</p>
-      </aside>
-    </div>
-    <div class="graph-legend">
-      <span><i class="legend-dot trigger"></i>Trigger</span>
-      <span><i class="legend-dot related"></i>Related Transaction</span>
-      <span><i class="legend-dot entity"></i>Shared Entity</span>
-      <button id="reset-graph-view" class="secondary-action graph-reset" type="button">Reset View</button>
+    <div class="fraud-map" aria-label="Live fraud network graph">
+      <div class="fraud-map-legend" aria-label="Graph legend">
+        <span><i class="legend-dot account"></i>Account</span>
+        <span><i class="legend-dot device"></i>Device</span>
+        <span><i class="legend-dot merchant"></i>Merchant</span>
+        <span><i class="legend-dot exchange"></i>Exchange</span>
+        <span><i class="legend-line transaction"></i>Transaction</span>
+        <span><i class="legend-line shared"></i>Shared Link</span>
+      </div>
+      <svg class="fraud-map-lines" viewBox="0 0 1000 380" role="img" aria-label="${nodes.length} nodes and ${edgeCount} edges">
+        <line class="map-line transaction" x1="115" y1="190" x2="265" y2="190" />
+        <line class="map-line transaction" x1="310" y1="190" x2="575" y2="190" />
+        <line class="map-line transaction" x1="620" y1="190" x2="760" y2="190" />
+        <line class="map-line transaction" x1="805" y1="190" x2="925" y2="190" />
+        <line class="map-line shared" x1="290" y1="170" x2="460" y2="80" />
+        <line class="map-line shared" x1="290" y1="210" x2="465" y2="300" />
+        <line class="map-line transaction" x1="485" y1="95" x2="585" y2="170" />
+        <line class="map-line transaction" x1="485" y1="285" x2="585" y2="210" />
+      </svg>
+      <button class="fraud-node account account-a" type="button" data-node="Account A">
+        <span class="node-bubble"></span>
+        <strong>Account A</strong>
+        <small>**1234</small>
+        <em>High Risk</em>
+      </button>
+      <button class="fraud-node device device-x" type="button" data-node="Device X">
+        <span class="node-bubble"></span>
+        <strong>Device X</strong>
+        <small>Android</small>
+        <em>High Risk</em>
+      </button>
+      <button class="fraud-node account account-b" type="button" data-node="Account B">
+        <span class="node-bubble"></span>
+        <strong>Account B</strong>
+        <small>**5678</small>
+        <em>High Risk</em>
+      </button>
+      <button class="fraud-node account account-d" type="button" data-node="Account D">
+        <span class="node-bubble"></span>
+        <strong>Account D</strong>
+        <small>**9012</small>
+        <em class="medium">Medium Risk</em>
+      </button>
+      <button class="fraud-node account account-c" type="button" data-node="Account C">
+        <span class="node-bubble"></span>
+        <strong>Account C</strong>
+        <small>**3456</small>
+        <em>High Risk</em>
+      </button>
+      <button class="fraud-node merchant merchant-y" type="button" data-node="Merchant Y">
+        <span class="node-bubble"></span>
+        <strong>Merchant Y</strong>
+        <small>Online Store</small>
+        <em class="medium">Medium Risk</em>
+      </button>
+      <button class="fraud-node exchange exchange-z" type="button" data-node="Exchange Z">
+        <span class="node-bubble"></span>
+        <strong>Exchange Z</strong>
+        <small>Crypto Exchange</small>
+        <em>High Risk</em>
+      </button>
+      <div class="fraud-map-controls" aria-label="Graph controls">
+        <button class="secondary-action" type="button">□</button>
+        <button class="secondary-action" type="button">−</button>
+        <button class="secondary-action" type="button">+</button>
+      </div>
     </div>
   `;
 };
@@ -835,7 +889,7 @@ const renderCase = (caseData) => {
   document.querySelector("#network-graph").innerHTML = renderNetworkGraph(
     networkOutput?.data?.network_graph,
   );
-  mountNetworkGraph3d(networkOutput?.data?.network_graph);
+  disposeNetworkGraph3d();
   document.querySelector("#campaign-detection").innerHTML = renderCampaignDetection(
     networkOutput?.data?.campaign_detection,
   );
