@@ -46,6 +46,10 @@ class AgentGateway:
             case_id=context.case_id,
             metadata={
                 "service_account": agent.identity.service_account,
+                "agent_principal": agent.identity.agent_principal,
+                "registry_resource": agent.identity.registry_resource,
+                "managed_gateway_policy": agent.identity.managed_gateway_policy,
+                "identity_provider": agent.identity.identity_provider,
                 "required_permissions": agent.required_permissions,
             },
         )
@@ -87,6 +91,10 @@ class AgentGateway:
             metadata={
                 "confidence": sanitized_output.confidence,
                 "guardrail_findings": sanitized_output.guardrail_findings,
+                "service_account": agent.identity.service_account,
+                "agent_principal": agent.identity.agent_principal,
+                "registry_resource": agent.identity.registry_resource,
+                "managed_gateway_policy": agent.identity.managed_gateway_policy,
             },
         ).event_hash
         self.trace_logger.emit(

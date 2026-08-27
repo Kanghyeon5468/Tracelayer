@@ -1027,11 +1027,16 @@ const renderAgentRegistry = (agents) => {
         [
           agent.display_name,
           agent.agent_id,
-          agent.owner,
-          agent.status,
-          agent.tool,
+          agent.owner_department,
+          agent.lifecycle_status,
+          agent.deployed_runtime,
+          agent.managed_gateway_policy,
+          agent.data_region,
+          agent.service_account,
+          agent.agent_principal,
           ...agent.permissions,
           ...agent.data_access,
+          ...agent.allowed_tools,
         ]
           .join(" ")
           .toLowerCase()
@@ -1041,7 +1046,7 @@ const renderAgentRegistry = (agents) => {
   document.querySelector("#agent-registry").innerHTML = `
     <div class="registry-toolbar">
       <input id="agent-registry-search" type="search" placeholder="Search agents" value="${escapeHtml(query)}" />
-      <span>${visibleAgents.length}/${agents.length} approved agents</span>
+      <span>${visibleAgents.length}/${agents.length} registry entries</span>
     </div>
     <div class="registry-list">
       ${
@@ -1051,19 +1056,32 @@ const renderAgentRegistry = (agents) => {
         <article class="registry-card">
           <header>
             <h3>${agent.display_name}</h3>
-            <span class="chip">${agent.status}</span>
+            <span class="chip">${titleCase(agent.lifecycle_status)}</span>
           </header>
           <dl class="registry-meta">
             <div><dt>Version</dt><dd>${agent.version}</dd></div>
-            <div><dt>Owner</dt><dd>${agent.owner}</dd></div>
-            <div><dt>Health</dt><dd>${agent.health}</dd></div>
-            <div><dt>Updated</dt><dd>${agent.updated}</dd></div>
+            <div><dt>Approved</dt><dd>${agent.approved_version || agent.version}</dd></div>
+            <div><dt>Owner</dt><dd>${agent.owner_department}</dd></div>
+            <div><dt>Runtime</dt><dd>${agent.deployed_runtime}</dd></div>
+            <div><dt>Region</dt><dd>${agent.data_region}</dd></div>
+            <div><dt>Health</dt><dd>${titleCase(agent.health_status)}</dd></div>
           </dl>
-          <code>${agent.service_account}</code>
-          <p>${agent.tool}</p>
+          <p><strong>Managed Gateway</strong> ${escapeHtml(agent.managed_gateway_policy)}</p>
+          <p><strong>IAM Principal</strong></p>
+          <code>${escapeHtml(agent.service_account)}</code>
+          <p><strong>Agent Identity</strong></p>
+          <code>${escapeHtml(agent.agent_principal || "Pending Agent Runtime SPIFFE binding")}</code>
+          <p><strong>Registry Resource</strong></p>
+          <code>${escapeHtml(agent.registry_resource || "Pending registration")}</code>
+          <p><strong>Allowed Tools</strong></p>
+          <div class="chip-row">
+            ${(agent.allowed_tools || []).map((tool) => `<span class="chip">${titleCase(tool)}</span>`).join("")}
+          </div>
+          <p><strong>Permissions</strong></p>
           <div class="chip-row">
             ${agent.permissions.map((permission) => `<span class="chip">${permission}</span>`).join("")}
           </div>
+          <p><strong>Data Classes</strong></p>
           <div class="chip-row">
             ${agent.data_access.map((access) => `<span class="chip">${titleCase(access)}</span>`).join("")}
           </div>
@@ -1077,44 +1095,19 @@ const renderAgentRegistry = (agents) => {
 };
 
 const enrichAgentIdentity = (agent) => {
-  const meta = {
-    "triage-agent": {
-      owner: "Fraud Risk",
-      status: "Approved",
-      health: "Healthy",
-      updated: "Aug 27",
-      tool: "Tool: Vertex AI Gemini risk explanation and Veritas federated scoring",
-    },
-    "network-agent": {
-      owner: "Fraud Intelligence",
-      status: "Approved",
-      health: "Healthy",
-      updated: "Aug 27",
-      tool: "Tool: BigQuery network search and campaign graph discovery",
-    },
-    "evidence-agent": {
-      owner: "Investigations",
-      status: "Approved",
-      health: "Healthy",
-      updated: "Aug 27",
-      tool: "Tool: evidence timeline writer with policy references",
-    },
-    "compliance-agent": {
-      owner: "Compliance",
-      status: "Approved",
-      health: "Healthy",
-      updated: "Aug 27",
-      tool: "Tool: PII, Model Armor, and enforcement policy checks",
-    },
-    "case-manager-agent": {
-      owner: "Case Operations",
-      status: "Approved",
-      health: "Healthy",
-      updated: "Aug 27",
-      tool: "Tool: Gemini planner, ADK runner session, approval routing, and resume state",
-    },
+  return {
+    owner_department: "Fraud Operations",
+    lifecycle_status: "approved",
+    approved_version: agent.version,
+    deployed_runtime: "cloud-run-adk-runner",
+    allowed_tools: [],
+    data_region: "us-central1",
+    registry_resource: null,
+    agent_principal: null,
+    managed_gateway_policy: "audit-only",
+    health_status: "healthy",
+    ...agent,
   };
-  return { ...agent, ...(meta[agent.agent_id] || meta["case-manager-agent"]) };
 };
 
 const activateDashboardTab = (tabName) => {
@@ -1452,6 +1445,63 @@ const runMissingDataDemo = async () => {
   }
 };
 
+const startLongRunningDemo = async () => {
+  const button = document.querySelector("#start-long-running-demo");
+  button.disabled = true;
+  button.textContent = "Starting...";
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/cases/long-running-demo`, {
+      method: "POST",
+      headers: apiHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    const caseData = await response.json();
+    renderCase(caseData);
+    publishCaseUpdate(caseData, "dashboard.long_running_start");
+    setLiveStatus("Long case: Day 1 stored");
+  } catch (error) {
+    renderCase(fallbackCase);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Start Long Case";
+  }
+};
+
+const advanceLongRunningDemo = async () => {
+  const button = document.querySelector("#advance-long-running-demo");
+  button.disabled = true;
+  button.textContent = "Advancing...";
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/cases/${encodeURIComponent(currentCaseId)}/long-running/advance`,
+      {
+        method: "POST",
+        headers: { ...apiHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: "next" }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    const caseData = await response.json();
+    renderCase(caseData);
+    publishCaseUpdate(caseData, "dashboard.long_running_advance");
+    const latestLongEvent = [...(caseData.evidence_timeline || [])]
+      .reverse()
+      .find((event) => String(event.event_type || "").startsWith("day_"));
+    setLiveStatus(`Long case: ${titleCase(latestLongEvent?.event_type || "advanced")}`);
+  } catch (error) {
+    setLiveStatus("Long case: start a long case first");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Advance Day";
+  }
+};
+
 const pollJob = async (jobId) => {
   const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
     headers: apiHeaders(),
@@ -1627,6 +1677,8 @@ document.querySelector("#run-demo").addEventListener("click", runDemo);
 document.querySelector("#run-attack-demo").addEventListener("click", runAttackDemo);
 document.querySelector("#run-async-demo").addEventListener("click", runAsyncDemo);
 document.querySelector("#run-missing-data-demo").addEventListener("click", runMissingDataDemo);
+document.querySelector("#start-long-running-demo").addEventListener("click", startLongRunningDemo);
+document.querySelector("#advance-long-running-demo").addEventListener("click", advanceLongRunningDemo);
 document.addEventListener("click", handleFraudMapControlClick);
 document.addEventListener("click", handleDashboardTabClick);
 document.addEventListener("click", handleProvideMissingDataClick);

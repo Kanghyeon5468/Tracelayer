@@ -28,6 +28,8 @@ spec:
               value: PROJECT_ID
             - name: GOOGLE_CLOUD_LOCATION
               value: global
+            - name: PUBLIC_SERVICE_URL
+              value: https://tracelayer-api-235426782310.us-central1.run.app
             - name: MODEL_ARMOR_BACKEND
               value: google
             - name: MODEL_ARMOR_LOCATION

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,6 +21,7 @@ from app.domain.models import (
     InvestigationCase,
     InvestigationJob,
     InvestigationRequest,
+    LongRunningAdvanceRequest,
     MissingDataRequest,
     PendingApprovalSummary,
     PubSubPushEnvelope,
@@ -99,6 +101,12 @@ def runtime_config() -> dict[str, str | bool | None]:
         "model_armor_template_configured": bool(settings.model_armor_template_name),
         "google_cloud_project": settings.google_cloud_project,
         "google_cloud_location": settings.google_cloud_location,
+        "public_service_url": settings.public_service_url,
+        "agent_registry_location": (
+            settings.google_cloud_location
+            if settings.google_cloud_location != "global"
+            else "us-central1"
+        ),
         "secrets_in_browser": False,
     }
 
@@ -119,9 +127,57 @@ def prompt_demo_console() -> RedirectResponse:
 
 
 @app.get("/agents", response_model=list[AgentIdentity])
-def list_agents(request: RequestContext = Depends(get_request_context)) -> list[AgentIdentity]:
+def list_agents(
+    q: str = Query(default=""),
+    request: RequestContext = Depends(get_request_context),
+) -> list[AgentIdentity]:
     _require_scope(request, "agents.read")
-    return AgentRegistry().list_agents()
+    registry = _agent_registry()
+    return registry.search(q) if q else registry.list_agents()
+
+
+@app.get("/agents/{agent_id}", response_model=AgentIdentity)
+def get_agent(
+    agent_id: str,
+    request: RequestContext = Depends(get_request_context),
+) -> AgentIdentity:
+    _require_scope(request, "agents.read")
+    return _agent_registry().get(agent_id)
+
+
+@app.get("/a2a/{agent_id}/agent-card.json")
+def get_agent_card(agent_id: str, request: Request) -> dict[str, Any]:
+    return _agent_registry(request).a2a_agent_card(agent_id)
+
+
+@app.get("/agents/{agent_id}/agent-card.json")
+def get_agent_card_alias(agent_id: str, request: Request) -> dict[str, Any]:
+    return _agent_registry(request).a2a_agent_card(agent_id)
+
+
+@app.post("/agents/{agent_id}/invoke")
+def invoke_registered_agent(
+    agent_id: str,
+    request: RequestContext = Depends(get_request_context),
+) -> dict[str, Any]:
+    _require_scope(request, "cases.investigate")
+    agent = _agent_registry().get(agent_id)
+    return {
+        "agent_id": agent.agent_id,
+        "display_name": agent.display_name,
+        "status": "registered_endpoint_ready",
+        "message": (
+            "This endpoint is the Agent Registry invocation surface. "
+            "TraceLayer runs the actual tool through the internal AgentGateway and ADK Runner."
+        ),
+        "allowed_tools": agent.allowed_tools,
+        "managed_gateway_policy": agent.managed_gateway_policy,
+    }
+
+
+@app.get("/agent-registry/bootstrap")
+def agent_registry_bootstrap(request: Request) -> dict[str, Any]:
+    return _agent_registry(request).registry_bootstrap_manifest()
 
 
 @app.post("/cases/demo", response_model=InvestigationCase)
@@ -135,6 +191,30 @@ def enqueue_demo_case(
     request: RequestContext = Depends(get_request_context),
 ) -> InvestigationJob:
     return _run_or_raise(lambda: FraudInvestigationFleet(settings).enqueue_random_demo(request))
+
+
+@app.post("/cases/long-running-demo", response_model=InvestigationCase)
+def start_long_running_demo(
+    request: RequestContext = Depends(get_request_context),
+) -> InvestigationCase:
+    case = _run_or_raise(lambda: FraudInvestigationFleet(settings).start_long_running_demo(request))
+    return redact_case_for_role(case, request.role)
+
+
+@app.post("/cases/{case_id}/long-running/advance", response_model=InvestigationCase)
+def advance_long_running_demo(
+    case_id: str,
+    advance: LongRunningAdvanceRequest,
+    request: RequestContext = Depends(get_request_context),
+) -> InvestigationCase:
+    case = _run_or_raise(
+        lambda: FraudInvestigationFleet(settings).advance_long_running_demo(
+            case_id,
+            advance,
+            request,
+        )
+    )
+    return redact_case_for_role(case, request.role)
 
 
 @app.post("/cases/scenario", response_model=InvestigationCase)
@@ -294,6 +374,20 @@ def get_case_audit(
 def verify_audit_chain(request: RequestContext = Depends(get_request_context)) -> dict[str, bool]:
     _require_scope(request, "audit.read")
     return {"valid": AuditLedger(settings).verify_chain()}
+
+
+def _agent_registry(request: Request | None = None) -> AgentRegistry:
+    service_url = settings.public_service_url
+    if not service_url and request:
+        service_url = str(request.base_url).rstrip("/")
+    region = settings.google_cloud_location
+    if region == "global":
+        region = "us-central1"
+    return AgentRegistry(
+        project_id=settings.google_cloud_project,
+        region=region,
+        service_url=service_url,
+    )
 
 
 def _require_scope(request: RequestContext, scope: str) -> None:

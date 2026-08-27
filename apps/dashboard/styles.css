@@ -1561,7 +1561,7 @@ label {
 
 .registry-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: 12px;
 }
 
@@ -1594,12 +1594,13 @@ label {
 .registry-card p {
   margin: 8px 0 0;
   color: var(--muted);
+  font-size: 0.82rem;
   line-height: 1.4;
 }
 
 .registry-meta {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
   gap: 8px;
   margin: 0 0 10px;
 }

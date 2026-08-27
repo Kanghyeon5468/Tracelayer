@@ -26,6 +26,8 @@ A bank can benefit from fraud patterns learned across a federation without seein
 | Dashboard | `/dashboard` shows case summary, generated investigation plan, agent findings, ADK Runner metadata, privacy-separated federated risk, interactive 3D network graph, campaign detection, compliance, approval state, async job state, and Agent Registry. |
 | Admin Console | `/admin` lists pending approvals and approval history. Supervisors can approve, deny, request more evidence, and save risk thresholds. |
 | Google ADK | Triage, Network, Campaign Trace, and Case Manager tools run through `google.adk.runners.Runner` with `InMemorySessionService` when ADK is available. |
+| Agent Registry | `/agents` exposes lifecycle metadata, owner departments, approved versions, deployed runtime, allowed tools, data region, registry resource, and agent principal metadata. `/a2a/triage-agent/agent-card.json` can be registered in Google Cloud Agent Registry. |
+| Agent Identity | Triage and Compliance use separate agent identity metadata. Triage is scoped for BigQuery transaction reads; Compliance is scoped for policy, audit, and PII review without BigQuery read. |
 | Gemini Planning | Case Manager asks Gemini for a structured JSON investigation plan after Triage and post-Network findings, then validates it against policy before execution. |
 | Vertex AI Gemini | Backend-only Gemini access is supported through Vertex AI using `gemini-3.5-flash`. |
 | Firestore | Persists case snapshots, approvals, risk policy, and async investigation jobs in deployed mode. |
@@ -33,6 +35,7 @@ A bank can benefit from fraud patterns learned across a federation without seein
 | BigQuery | `BigQueryNetworkSearch` performs parameterized related-transaction search when configured, with deterministic local fallback metadata. |
 | Federated Intelligence | Embedded Veritas-inspired primitives generate aggregate fraud-risk signals without raw record movement. |
 | Security Demo | `tx-9701` demonstrates prompt-injection blocking and PII exfiltration denial through Google Cloud Model Armor when configured, with a deterministic local fallback. |
+| Long-Running Demo | `/cases/long-running-demo` creates a Day 1 paused case. `/cases/{case_id}/long-running/advance` adds Day 3, Day 7, and Day 14 events to the same persisted case and resumes the agent plan from memory. |
 | Observability | Agent runs emit hash-chained audit events and structured Cloud Logging trace fields. |
 
 ## Core Workflow
@@ -117,6 +120,53 @@ The post-network replan is the important agentic behavior: Gemini proposes the n
 5. Records ADK execution metadata in each agent output, including execution mode, tool name, session id, runner class, event count, and fallback reason if ADK is unavailable.
 
 The actual fraud tool still runs behind the Agent Gateway, so authorization, guardrails, audit, and Cloud Logging remain enforced.
+
+## Agent Registry, Identity, And Gateway Governance
+
+TraceLayer exposes each internal fleet member as a governed catalog entry through `/agents`. The registry view includes owner department, lifecycle status, approved version, deployed runtime, allowed tools, data region, service account, registry resource, agent principal metadata, and managed gateway policy.
+
+The Triage Agent also exposes an A2A Agent Card:
+
+```bash
+curl https://tracelayer-api-235426782310.us-central1.run.app/a2a/triage-agent/agent-card.json
+```
+
+That card can be registered in Google Cloud Agent Registry:
+
+```bash
+PROJECT_ID=project-6ecbea1e-e0c3-4325-a63
+REGION=us-central1
+SERVICE_URL=https://tracelayer-api-235426782310.us-central1.run.app
+
+curl -s "$SERVICE_URL/a2a/triage-agent/agent-card.json" > /tmp/tracelayer-triage-agent-card.json
+
+gcloud agent-registry services create tracelayer-triage-agent \
+  --project=$PROJECT_ID \
+  --location=$REGION \
+  --display-name="TraceLayer Triage Agent" \
+  --agent-spec-type=a2a-agent-card \
+  --agent-spec-content=@/tmp/tracelayer-triage-agent-card.json
+```
+
+Identity separation is visible in the registry metadata and gateway audit events:
+
+| Agent | IAM Principal Intent | Allowed Tools | Not Granted |
+| --- | --- | --- | --- |
+| Triage Agent | `tracelayer-triage-agent@PROJECT_ID.iam.gserviceaccount.com` | `score_transaction`, `compute_federated_intelligence`, `bigquery_read_transactions` | Approval writes, compliance audit mutation |
+| Compliance Agent | `tracelayer-compliance-agent@PROJECT_ID.iam.gserviceaccount.com` | `check_policy_and_pii`, `redact_case_view`, `read_audit_chain` | BigQuery transaction read, graph search |
+
+The intended production layering is:
+
+```text
+Google managed Agent Gateway
+  -> network and IAM egress enforcement
+TraceLayer AgentGateway
+  -> fraud-specific policy, Model Armor, data classification, audit, and trace controls
+Google ADK Runner
+  -> approved tool execution inside agent sessions
+```
+
+Detailed setup notes are in [infra/agent-registry/README.md](infra/agent-registry/README.md).
 
 ## Embedded Veritas Federated Intelligence
 
@@ -473,14 +523,46 @@ curl http://localhost:8080/audit/verify \
   -H "X-Tracelayer-Role: compliance"
 ```
 
+## Long-Running Case Demo
+
+Use the dashboard buttons:
+
+1. Click `Start Long Case` to create a Day 1 transaction alert that pauses for missing data.
+2. Click `Advance Day` once for Day 3 new transaction activity.
+3. Click `Advance Day` again for Day 7 supervisor feedback.
+4. Click `Advance Day` a third time for Day 14 missing-data arrival and agent resume.
+
+The case keeps the same `case_id` and stores each snapshot in the Memory Bank. In Cloud Run mode, that means Firestore persists the state across sessions.
+
+API equivalent:
+
+```bash
+SERVICE_URL=https://tracelayer-api-235426782310.us-central1.run.app
+
+CASE_ID=$(curl -s -X POST "$SERVICE_URL/cases/long-running-demo" \
+  -H "X-API-Key: local-demo-key" \
+  -H "X-Tracelayer-Role: supervisor" | jq -r '.case_id')
+
+curl -s -X POST "$SERVICE_URL/cases/$CASE_ID/long-running/advance" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: local-demo-key" \
+  -H "X-Tracelayer-Role: supervisor" \
+  --data '{"stage":"next"}'
+```
+
 ## API Surface
 
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /health` | Basic service health. |
 | `GET /runtime/config` | Safe runtime metadata without secrets, including ADK Runner availability. |
-| `GET /agents` | Registered agent identities, permissions, versions, and data classes. |
+| `GET /agents` | Registered agent identities, lifecycle status, permissions, versions, owner departments, tools, data region, and gateway policy. |
+| `GET /agents/{agent_id}` | Reads one lifecycle registry entry. |
+| `GET /a2a/{agent_id}/agent-card.json` | Returns an A2A Agent Card for Google Agent Registry manual registration. |
+| `GET /agent-registry/bootstrap` | Returns Agent Registry registration metadata and IAM separation intent. |
 | `POST /cases/demo` | Randomized synchronous demo investigation. |
+| `POST /cases/long-running-demo` | Creates the Day 1 persistent paused investigation. |
+| `POST /cases/{case_id}/long-running/advance` | Adds Day 3, Day 7, or Day 14 events to the same persisted case. |
 | `POST /cases/scenario` | Builds an isolated prompt-authored scenario and runs it through the real fleet. |
 | `POST /cases/demo/async` | Queues an async investigation job. |
 | `POST /pubsub/investigations` | Receives authenticated Pub/Sub push jobs in deployed mode. |
@@ -510,6 +592,7 @@ See [.env.example](.env.example) for the full local template.
 | `GEMINI_MODEL` | Defaults to `gemini-3.5-flash`. |
 | `GOOGLE_CLOUD_PROJECT` | Project for Cloud Run, Vertex AI, Firestore, Pub/Sub, and BigQuery. |
 | `GOOGLE_CLOUD_LOCATION` | Vertex AI region. |
+| `PUBLIC_SERVICE_URL` | Public Cloud Run base URL used in A2A Agent Cards and registry bootstrap metadata. |
 | `ADK_ENABLED` | Enables Google ADK definitions and Runner-backed tool execution. |
 | `ADK_MODEL` | Optional ADK model override. |
 | `MODEL_ARMOR_BACKEND` | Selects `auto`, `local`, or `google`. |

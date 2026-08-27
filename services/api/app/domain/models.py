@@ -122,6 +122,18 @@ class AgentIdentity(BaseModel):
     data_access: list[DataClassification] = Field(
         default_factory=lambda: [DataClassification.INTERNAL]
     )
+    owner_department: str = "Fraud Operations"
+    lifecycle_status: str = "approved"
+    approved_version: str | None = None
+    deployed_runtime: str = "cloud-run-adk-runner"
+    allowed_tools: list[str] = Field(default_factory=list)
+    data_region: str = "us-central1"
+    registry_resource: str | None = None
+    agent_principal: str | None = None
+    identity_provider: str = "google-cloud-iam"
+    managed_gateway_policy: str = "audit-only"
+    health_status: str = "healthy"
+    last_updated: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class AgentOutput(BaseModel):
@@ -179,6 +191,11 @@ class MissingDataRequest(BaseModel):
         min_length=8,
         max_length=500,
     )
+
+
+class LongRunningAdvanceRequest(BaseModel):
+    stage: str = Field(default="next", pattern="^(next|day3|day7|day14)$")
+    note: str | None = Field(default=None, max_length=500)
 
 
 class PubSubPushMessage(BaseModel):

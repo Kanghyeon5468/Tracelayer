@@ -40,6 +40,7 @@ ROLE_SCOPES: dict[ActorRole, set[str]] = {
 
 PERMISSION_TO_CLASSIFICATION: dict[str, DataClassification] = {
     "transactions.read": DataClassification.RESTRICTED,
+    "bigquery.transactions.read": DataClassification.RESTRICTED,
     "graph.search": DataClassification.CONFIDENTIAL,
     "risk.score": DataClassification.CONFIDENTIAL,
     "policies.read": DataClassification.INTERNAL,

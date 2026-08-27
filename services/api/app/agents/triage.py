@@ -9,7 +9,7 @@ from app.federation.engine import VeritasFederatedRiskEngine
 
 
 class TriageAgent(BaseInvestigationAgent):
-    required_permissions = ["transactions.read", "risk.score"]
+    required_permissions = ["transactions.read", "bigquery.transactions.read", "risk.score"]
 
     def __init__(
         self,

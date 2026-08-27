@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.config import Settings
+from app.agents.registry import AgentRegistry
 from app.connectors.repository import InvestigationRepository
 from app.connectors.report_writer import ReportWriter
 from app.connectors.scenario_builder import SyntheticScenarioBuilder
@@ -19,6 +20,7 @@ from app.security.guardrails import ModelArmorGuardrail
 from app.domain.models import (
     ActorRole,
     ApprovalDecisionRequest,
+    LongRunningAdvanceRequest,
     MissingDataRequest,
     PubSubPushEnvelope,
     RequestContext,
@@ -281,6 +283,68 @@ def test_missing_data_case_resumes_from_memory_after_external_event(tmp_path: Pa
     assert any(
         event.event_type == "missing_data_provided"
         for event in resumed_case.evidence_timeline
+    )
+
+
+def test_long_running_case_keeps_same_case_id_across_synthetic_days(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+    supervisor = RequestContext(
+        actor_id="supervisor@example.com",
+        role=ActorRole.SUPERVISOR,
+        request_id="req-test-long-running",
+    )
+
+    day1 = fleet.start_long_running_demo(supervisor)
+    day3 = fleet.advance_long_running_demo(
+        day1.case_id,
+        LongRunningAdvanceRequest(stage="next"),
+        supervisor,
+    )
+    day7 = fleet.advance_long_running_demo(
+        day1.case_id,
+        LongRunningAdvanceRequest(stage="next"),
+        supervisor,
+    )
+    day14 = fleet.advance_long_running_demo(
+        day1.case_id,
+        LongRunningAdvanceRequest(stage="next"),
+        supervisor,
+    )
+
+    assert day3.case_id == day1.case_id
+    assert day7.case_id == day1.case_id
+    assert day14.case_id == day1.case_id
+    assert day14.status == "needs_approval"
+    assert day14.approval_request is not None
+    assert {
+        "day_1_transaction_alert",
+        "day_3_new_transaction",
+        "day_7_supervisor_feedback",
+        "day_14_agent_resume",
+    }.issubset({event.event_type for event in day14.evidence_timeline})
+
+
+def test_agent_registry_exposes_a2a_card_and_lifecycle_identity() -> None:
+    registry = AgentRegistry(
+        project_id="demo-project",
+        region="us-central1",
+        service_url="https://tracelayer.example",
+    )
+
+    triage = registry.get("triage-agent")
+    compliance = registry.get("compliance-agent")
+    card = registry.a2a_agent_card("triage-agent")
+
+    assert triage.lifecycle_status == "approved"
+    assert triage.registry_resource == (
+        "projects/demo-project/locations/us-central1/services/tracelayer-triage-agent"
+    )
+    assert "bigquery.transactions.read" in triage.permissions
+    assert "bigquery.transactions.read" not in compliance.permissions
+    assert card["url"] == "https://tracelayer.example/agents/triage-agent/invoke"
+    assert card["metadata"]["managed_gateway_policy"] == "enforced-bigquery-read-only"
+    assert {skill["id"] for skill in card["skills"]}.issuperset(
+        {"score_transaction", "bigquery_read_transactions"}
     )
 
 

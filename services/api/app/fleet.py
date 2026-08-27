@@ -33,6 +33,7 @@ from app.domain.models import (
     InvestigationContext,
     InvestigationJob,
     InvestigationJobStatus,
+    LongRunningAdvanceRequest,
     MissingDataRequest,
     PendingApprovalSummary,
     PlanStepStatus,
@@ -81,7 +82,11 @@ class FraudInvestigationFleet:
         adk_runtime: AdkAgentRuntime | None = None,
     ) -> None:
         self.settings = settings
-        self.registry = AgentRegistry()
+        self.registry = AgentRegistry(
+            project_id=settings.google_cloud_project,
+            region=settings.google_cloud_location if settings.google_cloud_location != "global" else "us-central1",
+            service_url=settings.public_service_url,
+        )
         self.repository = repository or InvestigationRepository()
         self.report_writer = report_writer or ReportWriter()
         self.bus = bus or create_pubsub_bus(settings)
@@ -834,6 +839,119 @@ class FraudInvestigationFleet:
         )
         return updated_case
 
+    def start_long_running_demo(
+        self,
+        request: RequestContext | None = None,
+    ) -> InvestigationCase:
+        request = request or build_service_context()
+        case = self.investigate("tx-9801", request, create_case_run=True)
+        timeline_event = EvidenceEvent(
+            timestamp=datetime(2026, 8, 1, 14, 5, tzinfo=UTC),
+            event_type="day_1_transaction_alert",
+            description=(
+                "Day 1: transaction alert opened a persistent case. The Case Manager "
+                "paused because the beneficiary, amount, device, and IP evidence was incomplete."
+            ),
+            source="synthetic_long_running_demo",
+            related_transaction_id=case.trigger_transaction_id,
+        )
+        updated_case = case.model_copy(
+            update={
+                "evidence_timeline": [timeline_event, *case.evidence_timeline],
+                "human_feedback": "Long-running demo started: waiting for external source data.",
+                "updated_at": datetime.now(UTC),
+            }
+        )
+        return self._persist_case_update(
+            updated_case,
+            request,
+            action="cases.long_running.start",
+            reason="Synthetic multi-day case timeline started and persisted.",
+        )
+
+    def advance_long_running_demo(
+        self,
+        case_id: str,
+        advance: LongRunningAdvanceRequest,
+        request: RequestContext | None = None,
+    ) -> InvestigationCase:
+        request = request or build_service_context()
+        actor_decision = self.policy_engine.actor_can(request, "cases.investigate")
+        self.audit_ledger.record(
+            request=request,
+            action="cases.long_running.advance",
+            resource=case_id,
+            decision="allow" if actor_decision.allowed else "deny",
+            reason=actor_decision.reason,
+            case_id=case_id,
+            metadata={"requested_stage": advance.stage},
+        )
+        if not actor_decision.allowed:
+            raise PermissionError(actor_decision.reason)
+
+        case = self.memory_bank.load_case(case_id)
+        if not case:
+            raise KeyError(f"Case not found: {case_id}")
+
+        stage = self._resolve_long_running_stage(case, advance.stage)
+        if stage == "day14":
+            prior_long_events = [
+                event
+                for event in case.evidence_timeline
+                if event.event_type.startswith("day_")
+            ]
+            reason = advance.note or (
+                "Day 14: external core-banking event supplied the missing beneficiary, "
+                "amount, shared device, and IP signals. Resume the persisted case."
+            )
+            resumed = self.provide_missing_data(
+                case_id,
+                MissingDataRequest(reason=reason),
+                request,
+            )
+            event = EvidenceEvent(
+                timestamp=datetime(2026, 8, 14, 16, 40, tzinfo=UTC),
+                event_type="day_14_agent_resume",
+                description=(
+                    "Day 14: the Case Manager loaded the old Firestore memory state and "
+                    "resumed the investigation with the new external evidence."
+                ),
+                source="synthetic_long_running_demo",
+                related_transaction_id=resumed.trigger_transaction_id,
+            )
+            updated_case = resumed.model_copy(
+                update={
+                    "evidence_timeline": [
+                        *prior_long_events,
+                        *resumed.evidence_timeline,
+                        event,
+                    ],
+                    "human_feedback": reason,
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+            return self._persist_case_update(
+                updated_case,
+                request,
+                action="cases.long_running.day14_resume",
+                reason="Long-running case resumed from persisted memory on Day 14.",
+            )
+
+        event = self._long_running_event_for_stage(stage, case, advance.note)
+        updated_case = case.model_copy(
+            update={
+                "evidence_timeline": [*case.evidence_timeline, event],
+                "human_feedback": event.description,
+                "updated_at": datetime.now(UTC),
+            }
+        )
+        return self._persist_case_update(
+            updated_case,
+            request,
+            action=f"cases.long_running.{stage}",
+            reason=f"Long-running synthetic {stage} event persisted.",
+        )
+
     def provide_missing_data(
         self,
         case_id: str,
@@ -962,6 +1080,86 @@ class FraudInvestigationFleet:
             },
         )
         return updated_case
+
+    def _persist_case_update(
+        self,
+        case: InvestigationCase,
+        request: RequestContext,
+        action: str,
+        reason: str,
+    ) -> InvestigationCase:
+        report_path = self.report_writer.path_for(case.case_id)
+        case = case.model_copy(update={"report_path": str(report_path)})
+        memory_snapshot_id = self.memory_bank.save_case(case)
+        event = self.audit_ledger.record(
+            request=request,
+            action=action,
+            resource=case.case_id,
+            decision="allow",
+            reason=reason,
+            case_id=case.case_id,
+            metadata={"memory_snapshot_id": memory_snapshot_id},
+        )
+        updated_case = case.model_copy(
+            update={
+                "memory_snapshot_id": memory_snapshot_id,
+                "audit_chain_tip": event.event_hash,
+                "updated_at": datetime.now(UTC),
+            }
+        )
+        self.report_writer.write_markdown(updated_case)
+        self.trace_logger.emit(
+            message=reason,
+            request=request,
+            case_id=case.case_id,
+            tool="FraudInvestigationFleet.long_running_demo",
+            status="persisted",
+            metadata={"memory_snapshot_id": memory_snapshot_id},
+        )
+        return updated_case
+
+    @staticmethod
+    def _resolve_long_running_stage(case: InvestigationCase, requested_stage: str) -> str:
+        if requested_stage != "next":
+            return requested_stage
+        seen = {event.event_type for event in case.evidence_timeline}
+        if "day_3_new_transaction" not in seen:
+            return "day3"
+        if "day_7_supervisor_feedback" not in seen:
+            return "day7"
+        return "day14"
+
+    @staticmethod
+    def _long_running_event_for_stage(
+        stage: str,
+        case: InvestigationCase,
+        note: str | None,
+    ) -> EvidenceEvent:
+        if stage == "day3":
+            return EvidenceEvent(
+                timestamp=datetime(2026, 8, 3, 17, 25, tzinfo=UTC),
+                event_type="day_3_new_transaction",
+                description=note
+                or (
+                    "Day 3: a new related transaction arrived from the same account cluster. "
+                    "The case stayed paused while the agent retained cross-session memory."
+                ),
+                source="synthetic_long_running_demo",
+                related_transaction_id=case.trigger_transaction_id,
+            )
+        if stage == "day7":
+            return EvidenceEvent(
+                timestamp=datetime(2026, 8, 7, 9, 10, tzinfo=UTC),
+                event_type="day_7_supervisor_feedback",
+                description=note
+                or (
+                    "Day 7: supervisor requested more evidence on shared device activity "
+                    "before allowing any enforcement action."
+                ),
+                source="synthetic_long_running_demo",
+                related_transaction_id=case.trigger_transaction_id,
+            )
+        raise ValueError(f"Unsupported long-running stage: {stage}")
 
     def get_risk_policy(self, request: RequestContext | None = None) -> RiskPolicy:
         request = request or build_service_context()
