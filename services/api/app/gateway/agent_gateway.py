@@ -32,6 +32,7 @@ class AgentGateway:
         request: RequestContext,
     ) -> None:
         started_at = perf_counter()
+        # The gateway is the policy boundary before any agent can touch tools or case state.
         decision = self.policy_engine.agent_can_run(
             agent.identity,
             agent.required_permissions,
@@ -70,6 +71,7 @@ class AgentGateway:
             raise PermissionError(decision.reason)
 
         raw_output = self._run_agent(agent, context, request)
+        # Outputs are sanitized after every agent step before they enter shared memory.
         sanitized_output = self.guardrail.sanitize_output(raw_output)
         context.agent_outputs[-1] = sanitized_output
 

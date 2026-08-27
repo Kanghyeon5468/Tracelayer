@@ -142,6 +142,7 @@ class FraudInvestigationFleet:
             customer=customer,
         )
 
+        # The Case Manager plans before and after triage so routing changes with case risk.
         planned_action_handlers = self._planned_action_handlers()
         planning_agent = CaseManagerPlanningAgent(
             self.registry.get("case-manager-agent"),
@@ -291,6 +292,7 @@ class FraudInvestigationFleet:
                     continue
                 self.gateway.run_agent(agent, context, request)
                 step.status = PlanStepStatus.COMPLETED
+                # Campaign-like network findings can add deeper tracing without restarting the case.
                 if (
                     planning_agent
                     and allowed_actions is None

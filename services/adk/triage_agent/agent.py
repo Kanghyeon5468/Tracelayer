@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 os.environ.setdefault("GOOGLE_API_USE_MTLS_ENDPOINT", "never")
 os.environ.setdefault("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 
+# Agent Engine needs the standard Vertex endpoint for the Gemini 3.5 multi-region route.
 from google.adk.agents import Agent
 
 TRACE_LAYER_API_BASE_URL = os.environ.get(
@@ -23,6 +24,7 @@ def score_trace_layer_transaction(transaction_id: str = "tx-9001") -> dict[str, 
     if not transaction_id:
         return {"status": "error", "message": "transaction_id is required"}
 
+    # The deployed ADK agent reaches TraceLayer through the same governed public API.
     payload = json.dumps(
         {"transaction_id": transaction_id, "include_case": True}
     ).encode("utf-8")

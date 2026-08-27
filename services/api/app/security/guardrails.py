@@ -39,6 +39,7 @@ class ModelArmorGuardrail:
 
     def inspect_text(self, text: str, control_prefix: str) -> list[GuardrailFinding]:
         findings = self._inspect_text_locally(text, control_prefix)
+        # Google Model Armor augments the deterministic local checks when configured.
         google_findings = self._inspect_text_with_google_model_armor(text, control_prefix)
         return self.merge_findings([google_findings, findings])
 

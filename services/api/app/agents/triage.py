@@ -79,6 +79,7 @@ class TriageAgent(BaseInvestigationAgent):
 
         federated_signal = self.federated_engine.score_transaction(transaction)
         context.federated_risk_signal = federated_signal
+        # The federated score can raise risk, but it exposes only aggregate metadata.
         if federated_signal.federated_risk_score >= 80:
             score += 15
             factors.append(

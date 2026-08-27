@@ -177,6 +177,7 @@ const API_BASE_URL =
 
 let currentCaseId = localStorage.getItem("tracelayer.currentCaseId") || fallbackCase.case_id;
 let runtimeConfig = { pubsub_backend: "local" };
+// BroadcastChannel lets the dashboard and admin page share approval updates live.
 const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("tracelayer-live") : null;
 let threeModulePromise = null;
 let networkGraph3dState = null;
@@ -528,6 +529,7 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
   scene.add(fillLight);
 
   const nodeMeshes = [];
+  // The backend supplies graph semantics; the frontend only lays them out for inspection.
   const positionedNodes = positionGraphNodes3d(THREE, graph.nodes.slice(0, 18));
   const nodeById = new Map(positionedNodes.map((node) => [node.id, node]));
   const edgeMaterial = new THREE.MeshStandardMaterial({
@@ -680,6 +682,7 @@ const positionGraphNodes3d = (THREE, nodes) => {
   if (!nodes.length) {
     return [];
   }
+  // A spherical scatter keeps shared fraud infrastructure readable as a true 3D graph.
   const trigger = nodes.find((node) => node.type === "trigger_transaction") || nodes[0];
   const others = nodes.filter((node) => node.id !== trigger.id);
   const relatedNodes = others.filter((node) => node.type === "related_transaction");

@@ -29,6 +29,7 @@ class VeritasFederatedRiskEngine:
 
     def score_transaction(self, transaction: Transaction) -> FederatedRiskSignal:
         raw_updates = self._simulate_institution_updates(transaction)
+        # Each node contributes a clipped and noised update; raw rows never leave the node.
         private_updates = {
             update.node_id: self._privatize_update(transaction, update.clipped_update, update.node_id)
             for update in raw_updates

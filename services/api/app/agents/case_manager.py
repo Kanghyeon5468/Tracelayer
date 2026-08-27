@@ -108,6 +108,7 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
     def _build_plan(self, context: InvestigationContext) -> InvestigationPlan:
         baseline_plan = self._build_policy_baseline_plan(context)
         if not self._triage_was_completed(context):
+            # Triage is mandatory before Gemini can choose deeper investigation steps.
             self.last_planner_metadata = {
                 "mode": "policy_baseline",
                 "gemini_proposal_used": False,
@@ -117,6 +118,7 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             return baseline_plan
 
         proposal_result = self._request_gemini_plan_proposal(context, baseline_plan)
+        # Gemini proposes the plan, but policy validation keeps the workflow bounded.
         validated_plan = self._validate_gemini_plan(context, proposal_result, baseline_plan)
         if validated_plan:
             self.last_planner_metadata = {

@@ -47,6 +47,7 @@ class GooglePubSubBus:
 
     def publish(self, topic: str, payload: dict[str, Any]) -> PublishedMessage:
         topic_path = self._topic_path(topic)
+        # Publishing hands off interactive requests to the Cloud Run worker path.
         message_id = self.publisher.publish(
             topic_path,
             json.dumps(payload, sort_keys=True).encode("utf-8"),

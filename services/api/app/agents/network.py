@@ -60,6 +60,7 @@ class NetworkAgent(BaseInvestigationAgent):
 
         context.network_links = links
         network_graph = self._build_network_graph(trigger, context.related_transactions, links)
+        # Campaign detection is derived from shared infrastructure, not model-only narration.
         campaign_detection = self._detect_campaign(context, links)
 
         output = AgentOutput(

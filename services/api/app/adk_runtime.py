@@ -164,6 +164,7 @@ class AdkAgentRuntime:
         binding = self.bind_agent(identity, instruction=instruction, description=description)
         fallback_reason = self._runner_unavailable_reason(binding)
         if fallback_reason:
+            # Local fallback keeps the demo usable while still recording ADK intent.
             output = tool_callback()
             metadata = {
                 "framework": "google_adk",
@@ -202,6 +203,7 @@ class AdkAgentRuntime:
         session_service = components["InMemorySessionService"]()
         session_id = self._session_id(context, identity)
         app_name = "tracelayer-fraud-fleet"
+        # Session state carries case memory into the ADK Runner for traceable tool execution.
         session_state = self._session_state(context, request, tool_name)
 
         try:
@@ -326,6 +328,7 @@ class AdkAgentRuntime:
             callback: Callable[[], AgentOutput]
 
             async def _run_async_impl(self, ctx):
+                # The ADK runner invokes exactly one approved TraceLayer tool per step.
                 output = self.callback()
                 output_box["output"] = output
                 yield event_class(
