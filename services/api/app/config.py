@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.5-flash"
     google_cloud_project: str | None = None
     google_cloud_location: str = "us"
+    agent_registry_location: str = "us-central1"
     public_service_url: str | None = None
     triage_agent_engine_resource: str | None = None
     triage_agent_runtime_principal: str | None = None

@@ -107,11 +107,7 @@ def runtime_config() -> dict[str, str | bool | None]:
         "triage_agent_runtime_principal_configured": bool(
             settings.triage_agent_runtime_principal
         ),
-        "agent_registry_location": (
-            settings.google_cloud_location
-            if settings.google_cloud_location != "global"
-            else "us-central1"
-        ),
+        "agent_registry_location": settings.agent_registry_location,
         "secrets_in_browser": False,
     }
 
@@ -403,12 +399,9 @@ def _agent_registry(request: Request | None = None) -> AgentRegistry:
     service_url = settings.public_service_url
     if not service_url and request:
         service_url = str(request.base_url).rstrip("/")
-    region = settings.google_cloud_location
-    if region == "global":
-        region = "us-central1"
     return AgentRegistry(
         project_id=settings.google_cloud_project,
-        region=region,
+        region=settings.agent_registry_location,
         service_url=service_url,
         triage_agent_engine_resource=settings.triage_agent_engine_resource,
         triage_agent_runtime_principal=settings.triage_agent_runtime_principal,

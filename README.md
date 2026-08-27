@@ -616,6 +616,7 @@ See [.env.example](.env.example) for the full local template.
 | `GEMINI_MODEL` | Defaults to `gemini-3.5-flash`. Use the `us` or `eu` multi-region endpoint for Gemini 3.5 model routing. |
 | `GOOGLE_CLOUD_PROJECT` | Project for Cloud Run, Vertex AI, Firestore, Pub/Sub, and BigQuery. |
 | `GOOGLE_CLOUD_LOCATION` | Vertex AI model endpoint location. This deployment uses `us` so Gemini 3.5 routes to the supported multi-region endpoint while Agent Runtime itself remains deployed in `us-central1`. |
+| `AGENT_REGISTRY_LOCATION` | Google Agent Registry service location. This stays `us-central1` even when the Gemini model endpoint uses `us`. |
 | `GOOGLE_API_USE_MTLS_ENDPOINT` | Set to `never` for the ADK Agent Engine demo so Gemini 3.5 uses the standard `aiplatform.us.rep.googleapis.com` endpoint instead of the mTLS endpoint. |
 | `GOOGLE_API_USE_CLIENT_CERTIFICATE` | Set to `false` with `GOOGLE_API_USE_MTLS_ENDPOINT=never` to keep Agent Engine model calls on the standard Vertex AI endpoint. |
 | `PUBLIC_SERVICE_URL` | Public Cloud Run base URL used in A2A Agent Cards and registry bootstrap metadata. |
