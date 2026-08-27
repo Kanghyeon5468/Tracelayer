@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.5-flash"
     google_cloud_project: str | None = None
     google_cloud_location: str = "global"
+    model_armor_backend: str = "auto"
+    model_armor_project: str | None = None
+    model_armor_location: str = "us-central1"
+    model_armor_template_id: str | None = None
+    model_armor_fail_closed: bool = False
     firestore_database: str = "(default)"
     firestore_case_collection: str = "tracelayer_cases"
     firestore_job_collection: str = "tracelayer_investigation_jobs"
@@ -67,6 +72,28 @@ class Settings(BaseSettings):
         if self.app_env == "cloud" and self.google_cloud_project:
             return "google"
         return "local"
+
+    @property
+    def resolved_model_armor_project(self) -> str | None:
+        return self.model_armor_project or self.google_cloud_project
+
+    @property
+    def resolved_model_armor_backend(self) -> str:
+        if self.model_armor_backend != "auto":
+            return self.model_armor_backend
+        if self.resolved_model_armor_project and self.model_armor_template_id:
+            return "google"
+        return "local"
+
+    @property
+    def model_armor_template_name(self) -> str | None:
+        project = self.resolved_model_armor_project
+        if not project or not self.model_armor_template_id:
+            return None
+        return (
+            f"projects/{project}/locations/{self.model_armor_location}/"
+            f"templates/{self.model_armor_template_id}"
+        )
 
 
 @lru_cache

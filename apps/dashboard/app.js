@@ -1362,7 +1362,10 @@ const loadRuntimeConfig = async () => {
     const live = status.dataset.liveStatus || "Live sync: ready";
     const adk = config.adk_available ? "Google ADK" : "local agent runtime";
     const pubsub = config.pubsub_backend === "google" ? "Pub/Sub push" : "local worker";
-    status.dataset.backendStatus = `Backend: ${config.ai_provider} / ${config.gemini_model} · ${adk} · ${pubsub}`;
+    const armor = config.model_armor_backend === "google"
+      ? `Model Armor ${config.model_armor_template_configured ? "configured" : "missing template"}`
+      : "local guardrail";
+    status.dataset.backendStatus = `Backend: ${config.ai_provider} / ${config.gemini_model} · ${adk} · ${pubsub} · ${armor}`;
     status.textContent = `${status.dataset.backendStatus} · ${live}`;
   } catch (error) {
     status.textContent = "Backend: local fallback";

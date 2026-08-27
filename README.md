@@ -32,7 +32,7 @@ A bank can benefit from fraud patterns learned across a federation without seein
 | Pub/Sub | Async jobs publish to Pub/Sub; an authenticated push subscription invokes `/pubsub/investigations` on Cloud Run. |
 | BigQuery | `BigQueryNetworkSearch` performs parameterized related-transaction search when configured, with deterministic local fallback metadata. |
 | Federated Intelligence | Embedded Veritas-inspired primitives generate aggregate fraud-risk signals without raw record movement. |
-| Security Demo | `tx-9701` demonstrates prompt-injection blocking and PII exfiltration denial through TraceLayer's guardrail boundary. |
+| Security Demo | `tx-9701` demonstrates prompt-injection blocking and PII exfiltration denial through Google Cloud Model Armor when configured, with a deterministic local fallback. |
 | Observability | Agent runs emit hash-chained audit events and structured Cloud Logging trace fields. |
 
 ## Core Workflow
@@ -199,7 +199,7 @@ Expected behavior:
 5. Guardrail findings are attached to the case.
 6. Cloud Logging receives structured trace entries for the agent run.
 
-`ModelArmorGuardrail` is TraceLayer's in-repo guardrail component. Do not describe it as a production Google Cloud Model Armor service integration unless that managed service is wired directly.
+`ModelArmorGuardrail` calls Google Cloud Model Armor `sanitizeUserPrompt` when `MODEL_ARMOR_BACKEND=google` and `MODEL_ARMOR_TEMPLATE_ID` is configured. It uses the regional endpoint `modelarmor.{MODEL_ARMOR_LOCATION}.rep.googleapis.com` and records Model Armor findings beside local fallback findings. If the managed service is unavailable, the deterministic local scanner remains active; set `MODEL_ARMOR_FAIL_CLOSED=true` to block on Model Armor failures.
 
 ## Architecture
 
@@ -512,6 +512,11 @@ See [.env.example](.env.example) for the full local template.
 | `GOOGLE_CLOUD_LOCATION` | Vertex AI region. |
 | `ADK_ENABLED` | Enables Google ADK definitions and Runner-backed tool execution. |
 | `ADK_MODEL` | Optional ADK model override. |
+| `MODEL_ARMOR_BACKEND` | Selects `auto`, `local`, or `google`. |
+| `MODEL_ARMOR_PROJECT` | Optional project override for Model Armor templates. |
+| `MODEL_ARMOR_LOCATION` | Regional Model Armor endpoint location, for example `us-central1`. |
+| `MODEL_ARMOR_TEMPLATE_ID` | Template used for `sanitizeUserPrompt`, for example `tracelayer-prompt-shield`. |
+| `MODEL_ARMOR_FAIL_CLOSED` | Blocks prompts if the managed Model Armor call fails. |
 | `MEMORY_BACKEND` | Selects `local`, `firestore`, or `auto`. |
 | `FIRESTORE_CASE_COLLECTION` | Firestore collection for case records. |
 | `FIRESTORE_JOB_COLLECTION` | Firestore collection for async jobs. |
@@ -554,6 +559,7 @@ Hash-chained audit ledger
 Agent Registry UI
 Risk threshold store
 Prompt-injection live demo
+Google Cloud Model Armor provider with local fallback
 ```
 
 ### Local Fallbacks

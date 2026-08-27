@@ -28,6 +28,12 @@ spec:
               value: PROJECT_ID
             - name: GOOGLE_CLOUD_LOCATION
               value: global
+            - name: MODEL_ARMOR_BACKEND
+              value: google
+            - name: MODEL_ARMOR_LOCATION
+              value: us-central1
+            - name: MODEL_ARMOR_TEMPLATE_ID
+              value: tracelayer-prompt-shield
             - name: MEMORY_BACKEND
               value: firestore
             - name: FIRESTORE_DATABASE

@@ -943,7 +943,7 @@ const loadRuntime = async () => {
     }
     const config = await response.json();
     document.querySelector("#demo-runtime-status").textContent =
-      `Backend: ${config.env} · AI: ${config.ai_provider} · ADK: ${config.adk_runner_available ? "runner" : "fallback"}`;
+      `Backend: ${config.env} · AI: ${config.ai_provider} · ADK: ${config.adk_runner_available ? "runner" : "fallback"} · Model Armor: ${config.model_armor_backend}`;
   } catch {
     document.querySelector("#demo-runtime-status").textContent = `Backend: ${API_BASE_URL}`;
   }

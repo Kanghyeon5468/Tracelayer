@@ -91,7 +91,7 @@ class FraudInvestigationFleet:
         self.audit_ledger = audit_ledger or AuditLedger(settings)
         self.trace_logger = CloudTraceLogger()
         self.policy_engine = policy_engine or PolicyEngine()
-        self.guardrail = guardrail or ModelArmorGuardrail()
+        self.guardrail = guardrail or ModelArmorGuardrail(settings)
         self.gateway = AgentGateway(self.policy_engine, self.guardrail, self.audit_ledger)
         self.reasoner = GeminiReasoner(settings, self.guardrail)
         self.federated_engine = federated_engine or VeritasFederatedRiskEngine()
