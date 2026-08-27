@@ -24,10 +24,12 @@ spec:
               value: vertex_ai
             - name: GEMINI_MODEL
               value: gemini-3.5-flash
+            - name: ADK_MODEL
+              value: gemini-3.5-flash
             - name: GOOGLE_CLOUD_PROJECT
               value: PROJECT_ID
             - name: GOOGLE_CLOUD_LOCATION
-              value: global
+              value: us
             - name: PUBLIC_SERVICE_URL
               value: https://tracelayer-api-235426782310.us-central1.run.app
             - name: TRIAGE_AGENT_ENGINE_RESOURCE

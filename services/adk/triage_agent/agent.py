@@ -51,7 +51,7 @@ def score_trace_layer_transaction(transaction_id: str = "tx-9001") -> dict[str, 
 
 
 root_agent = Agent(
-    model="gemini-3.5-flash",
+    model=os.environ.get("ADK_MODEL", "gemini-3.5-flash"),
     name="tracelayer_triage_agent",
     description=(
         "TraceLayer's Agent Runtime Triage Agent. It scores suspicious "

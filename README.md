@@ -29,7 +29,7 @@ A bank can benefit from fraud patterns learned across a federation without seein
 | Agent Registry | `/agents` exposes lifecycle metadata, owner departments, approved versions, deployed runtime, allowed tools, data region, registry resource, runtime resource, and agent principal metadata. `/a2a/triage-agent/agent-card.json` is registerable in Google Cloud Agent Registry. |
 | Agent Identity | Triage and Compliance use separate identity scopes. Triage is scoped for BigQuery transaction reads; Compliance is scoped for policy, audit, and PII review without BigQuery read. `services/adk/triage_agent` can be deployed to Agent Engine to bind a verified Agent Runtime SPIFFE principal. |
 | Gemini Planning | Case Manager asks Gemini for a structured JSON investigation plan after Triage and post-Network findings, then validates it against policy before execution. |
-| Vertex AI Gemini | Backend-only Gemini access is supported through Vertex AI using `gemini-3.5-flash`. |
+| Vertex AI Gemini | Backend-only Gemini access is supported through Vertex AI using `gemini-3.5-flash` on the `us` multi-region endpoint. |
 | Firestore | Persists case snapshots, approvals, risk policy, and async investigation jobs in deployed mode. |
 | Pub/Sub | Async jobs publish to Pub/Sub; an authenticated push subscription invokes `/pubsub/investigations` on Cloud Run. |
 | BigQuery | `BigQueryNetworkSearch` performs parameterized related-transaction search when configured, with deterministic local fallback metadata. |
@@ -613,14 +613,14 @@ See [.env.example](.env.example) for the full local template.
 | `USE_MOCK_DATA` | Keeps demo data deterministic. |
 | `AI_PROVIDER` | Selects `mock`, `gemini_api`, `vertex_ai`, or `auto`. |
 | `GEMINI_API_KEY` | Enables backend-only Gemini API mode. |
-| `GEMINI_MODEL` | Defaults to `gemini-3.5-flash`. |
+| `GEMINI_MODEL` | Defaults to `gemini-3.5-flash`. Use the `us` or `eu` multi-region endpoint for Gemini 3.5 model routing. |
 | `GOOGLE_CLOUD_PROJECT` | Project for Cloud Run, Vertex AI, Firestore, Pub/Sub, and BigQuery. |
-| `GOOGLE_CLOUD_LOCATION` | Vertex AI region. |
+| `GOOGLE_CLOUD_LOCATION` | Vertex AI model endpoint location. This deployment uses `us` so Gemini 3.5 routes to the supported multi-region endpoint while Agent Runtime itself remains deployed in `us-central1`. |
 | `PUBLIC_SERVICE_URL` | Public Cloud Run base URL used in A2A Agent Cards and registry bootstrap metadata. |
 | `TRIAGE_AGENT_ENGINE_RESOURCE` | Optional Agent Engine `reasoningEngines/*` resource for the deployed Triage Agent Runtime. |
 | `TRIAGE_AGENT_RUNTIME_PRINCIPAL` | Optional Google Agent Runtime SPIFFE principal for verified Triage Agent Identity. |
 | `ADK_ENABLED` | Enables Google ADK definitions and Runner-backed tool execution. |
-| `ADK_MODEL` | Optional ADK model override. |
+| `ADK_MODEL` | Optional ADK model override. Defaults to `gemini-3.5-flash`. |
 | `MODEL_ARMOR_BACKEND` | Selects `auto`, `local`, or `google`. |
 | `MODEL_ARMOR_PROJECT` | Optional project override for Model Armor templates. |
 | `MODEL_ARMOR_LOCATION` | Regional Model Armor endpoint location, for example `us-central1`. |
