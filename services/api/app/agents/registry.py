@@ -13,23 +13,32 @@ class AgentRegistry:
         project_id: str | None = None,
         region: str = "us-central1",
         service_url: str | None = None,
+        triage_agent_engine_resource: str | None = None,
+        triage_agent_runtime_principal: str | None = None,
     ) -> None:
         self.project_id = project_id or "project-6ecbea1e-e0c3-4325-a63"
         self.region = region
         self.service_url = (service_url or "").rstrip("/")
+        self.triage_agent_engine_resource = triage_agent_engine_resource
+        self.triage_agent_runtime_principal = triage_agent_runtime_principal
         self.updated_at = datetime(2026, 8, 28, 0, 0, tzinfo=UTC)
+        triage_runtime_enabled = bool(triage_agent_engine_resource)
         self._agents = {
             "triage-agent": AgentIdentity(
                 agent_id="triage-agent",
                 display_name="Triage Agent",
-                version="1.2.0",
+                version="1.2.1",
                 service_account=self._service_account("tracelayer-triage-agent"),
                 permissions=["transactions.read", "bigquery.transactions.read", "risk.score"],
                 data_access=[DataClassification.CONFIDENTIAL, DataClassification.RESTRICTED],
                 owner_department="Fraud Risk",
                 lifecycle_status="approved",
-                approved_version="1.2.0",
-                deployed_runtime="cloud-run-google-adk-runner",
+                approved_version="1.2.1",
+                deployed_runtime=(
+                    "agent-engine-google-adk-runtime"
+                    if triage_runtime_enabled
+                    else "cloud-run-google-adk-runner"
+                ),
                 allowed_tools=[
                     "score_transaction",
                     "compute_federated_intelligence",
@@ -37,7 +46,21 @@ class AgentRegistry:
                 ],
                 data_region=self.region,
                 registry_resource=self._registry_resource("tracelayer-triage-agent"),
-                agent_principal=self._agent_principal("tracelayer-triage-agent"),
+                runtime_resource=triage_agent_engine_resource,
+                agent_principal=(
+                    triage_agent_runtime_principal
+                    or self._agent_principal("tracelayer-triage-agent")
+                ),
+                identity_provider=(
+                    "google-agent-runtime-spiffe"
+                    if triage_agent_runtime_principal
+                    else "google-cloud-iam"
+                ),
+                identity_status=(
+                    "verified_agent_runtime"
+                    if triage_agent_runtime_principal
+                    else "metadata_declared"
+                ),
                 managed_gateway_policy="enforced-bigquery-read-only",
                 health_status="healthy",
                 last_updated=self.updated_at,
@@ -56,6 +79,7 @@ class AgentRegistry:
                 allowed_tools=["search_related_transactions", "trace_cluster_funds"],
                 data_region=self.region,
                 registry_resource=self._registry_resource("tracelayer-network-agent"),
+                runtime_resource=None,
                 agent_principal=self._agent_principal("tracelayer-network-agent"),
                 managed_gateway_policy="enforced-network-search",
                 health_status="healthy",
@@ -79,6 +103,7 @@ class AgentRegistry:
                 allowed_tools=["build_evidence_timeline"],
                 data_region=self.region,
                 registry_resource=self._registry_resource("tracelayer-evidence-agent"),
+                runtime_resource=None,
                 agent_principal=self._agent_principal("tracelayer-evidence-agent"),
                 managed_gateway_policy="audit-only-evidence-write",
                 health_status="healthy",
@@ -102,6 +127,7 @@ class AgentRegistry:
                 allowed_tools=["check_policy_and_pii", "redact_case_view", "read_audit_chain"],
                 data_region=self.region,
                 registry_resource=self._registry_resource("tracelayer-compliance-agent"),
+                runtime_resource=None,
                 agent_principal=self._agent_principal("tracelayer-compliance-agent"),
                 managed_gateway_policy="enforced-no-bigquery-read",
                 health_status="healthy",
@@ -126,6 +152,7 @@ class AgentRegistry:
                 ],
                 data_region=self.region,
                 registry_resource=self._registry_resource("tracelayer-case-manager-agent"),
+                runtime_resource=None,
                 agent_principal=self._agent_principal("tracelayer-case-manager-agent"),
                 managed_gateway_policy="enforced-approval-boundary",
                 health_status="healthy",
@@ -154,6 +181,8 @@ class AgentRegistry:
                     agent.owner_department,
                     agent.lifecycle_status,
                     agent.deployed_runtime,
+                    agent.identity_provider,
+                    agent.identity_status,
                     agent.managed_gateway_policy,
                     *agent.permissions,
                     *agent.allowed_tools,
@@ -190,7 +219,10 @@ class AgentRegistry:
             },
             "metadata": {
                 "registry_resource": agent.registry_resource,
+                "runtime_resource": agent.runtime_resource,
                 "agent_principal": agent.agent_principal,
+                "identity_provider": agent.identity_provider,
+                "identity_status": agent.identity_status,
                 "service_account": agent.service_account,
                 "data_region": agent.data_region,
                 "managed_gateway_policy": agent.managed_gateway_policy,
@@ -223,6 +255,8 @@ class AgentRegistry:
                 "service_id": "tracelayer-triage-agent",
                 "display_name": "TraceLayer Triage Agent",
                 "agent_card_url": triage_card,
+                "agent_engine_resource": self.triage_agent_engine_resource,
+                "agent_runtime_principal": self.triage_agent_runtime_principal,
             },
             "gcloud_register_triage_agent": (
                 f"curl -s {triage_card} > /tmp/tracelayer-triage-agent-card.json && "

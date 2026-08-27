@@ -336,6 +336,8 @@ def test_agent_registry_exposes_a2a_card_and_lifecycle_identity() -> None:
     card = registry.a2a_agent_card("triage-agent")
 
     assert triage.lifecycle_status == "approved"
+    assert triage.version == "1.2.1"
+    assert triage.identity_status == "metadata_declared"
     assert triage.registry_resource == (
         "projects/demo-project/locations/us-central1/services/tracelayer-triage-agent"
     )
@@ -343,9 +345,34 @@ def test_agent_registry_exposes_a2a_card_and_lifecycle_identity() -> None:
     assert "bigquery.transactions.read" not in compliance.permissions
     assert card["url"] == "https://tracelayer.example/agents/triage-agent/invoke"
     assert card["metadata"]["managed_gateway_policy"] == "enforced-bigquery-read-only"
+    assert card["metadata"]["identity_status"] == "metadata_declared"
     assert {skill["id"] for skill in card["skills"]}.issuperset(
         {"score_transaction", "bigquery_read_transactions"}
     )
+
+
+def test_agent_registry_can_show_verified_agent_runtime_identity() -> None:
+    registry = AgentRegistry(
+        project_id="demo-project",
+        region="us-central1",
+        service_url="https://tracelayer.example",
+        triage_agent_engine_resource=(
+            "projects/demo-project/locations/us-central1/reasoningEngines/123456"
+        ),
+        triage_agent_runtime_principal=(
+            "principal://agents.global.org-123.system.id.goog/resources/"
+            "aiplatform/projects/123/locations/us-central1/reasoningEngines/123456"
+        ),
+    )
+
+    triage = registry.get("triage-agent")
+    card = registry.a2a_agent_card("triage-agent")
+
+    assert triage.deployed_runtime == "agent-engine-google-adk-runtime"
+    assert triage.identity_provider == "google-agent-runtime-spiffe"
+    assert triage.identity_status == "verified_agent_runtime"
+    assert triage.runtime_resource == "projects/demo-project/locations/us-central1/reasoningEngines/123456"
+    assert card["metadata"]["identity_status"] == "verified_agent_runtime"
 
 
 def test_case_manager_generates_initial_plan_before_triage(tmp_path: Path) -> None:
@@ -767,7 +794,12 @@ def test_google_model_armor_provider_blocks_matched_prompt() -> None:
     assert any(finding.control == "google_model_armor" for finding in findings)
     assert any(finding.control == "prompt_injection" for finding in findings)
     assert any(finding.blocked for finding in findings)
-    assert FakeModelArmorClient.last_request["name"] == (
+    request_name = (
+        FakeModelArmorClient.last_request["name"]
+        if isinstance(FakeModelArmorClient.last_request, dict)
+        else FakeModelArmorClient.last_request.name
+    )
+    assert request_name == (
         "projects/demo-project/locations/us-central1/templates/tracelayer-prompt-shield"
     )
 

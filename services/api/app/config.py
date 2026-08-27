@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     google_cloud_project: str | None = None
     google_cloud_location: str = "global"
     public_service_url: str | None = None
+    triage_agent_engine_resource: str | None = None
+    triage_agent_runtime_principal: str | None = None
     model_armor_backend: str = "auto"
     model_armor_project: str | None = None
     model_armor_location: str = "us-central1"

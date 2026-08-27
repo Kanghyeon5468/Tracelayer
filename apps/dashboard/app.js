@@ -1031,6 +1031,9 @@ const renderAgentRegistry = (agents) => {
           agent.lifecycle_status,
           agent.deployed_runtime,
           agent.managed_gateway_policy,
+          agent.identity_provider,
+          agent.identity_status,
+          agent.runtime_resource,
           agent.data_region,
           agent.service_account,
           agent.agent_principal,
@@ -1063,6 +1066,7 @@ const renderAgentRegistry = (agents) => {
             <div><dt>Approved</dt><dd>${agent.approved_version || agent.version}</dd></div>
             <div><dt>Owner</dt><dd>${agent.owner_department}</dd></div>
             <div><dt>Runtime</dt><dd>${agent.deployed_runtime}</dd></div>
+            <div><dt>Identity</dt><dd>${titleCase(agent.identity_status)}</dd></div>
             <div><dt>Region</dt><dd>${agent.data_region}</dd></div>
             <div><dt>Health</dt><dd>${titleCase(agent.health_status)}</dd></div>
           </dl>
@@ -1071,6 +1075,8 @@ const renderAgentRegistry = (agents) => {
           <code>${escapeHtml(agent.service_account)}</code>
           <p><strong>Agent Identity</strong></p>
           <code>${escapeHtml(agent.agent_principal || "Pending Agent Runtime SPIFFE binding")}</code>
+          <p><strong>Runtime Resource</strong></p>
+          <code>${escapeHtml(agent.runtime_resource || "Pending Agent Engine deployment")}</code>
           <p><strong>Registry Resource</strong></p>
           <code>${escapeHtml(agent.registry_resource || "Pending registration")}</code>
           <p><strong>Allowed Tools</strong></p>
@@ -1103,7 +1109,10 @@ const enrichAgentIdentity = (agent) => {
     allowed_tools: [],
     data_region: "us-central1",
     registry_resource: null,
+    runtime_resource: null,
     agent_principal: null,
+    identity_provider: "google-cloud-iam",
+    identity_status: "metadata_declared",
     managed_gateway_policy: "audit-only",
     health_status: "healthy",
     ...agent,

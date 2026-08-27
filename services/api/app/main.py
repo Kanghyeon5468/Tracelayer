@@ -26,6 +26,7 @@ from app.domain.models import (
     PendingApprovalSummary,
     PubSubPushEnvelope,
     RequestContext,
+    RegisteredAgentInvokeRequest,
     RiskPolicy,
     ScenarioInvestigationRequest,
 )
@@ -102,6 +103,10 @@ def runtime_config() -> dict[str, str | bool | None]:
         "google_cloud_project": settings.google_cloud_project,
         "google_cloud_location": settings.google_cloud_location,
         "public_service_url": settings.public_service_url,
+        "triage_agent_engine_resource": settings.triage_agent_engine_resource,
+        "triage_agent_runtime_principal_configured": bool(
+            settings.triage_agent_runtime_principal
+        ),
         "agent_registry_location": (
             settings.google_cloud_location
             if settings.google_cloud_location != "global"
@@ -158,10 +163,20 @@ def get_agent_card_alias(agent_id: str, request: Request) -> dict[str, Any]:
 @app.post("/agents/{agent_id}/invoke")
 def invoke_registered_agent(
     agent_id: str,
+    invocation: RegisteredAgentInvokeRequest | None = None,
     request: RequestContext = Depends(get_request_context),
 ) -> dict[str, Any]:
     _require_scope(request, "cases.investigate")
     agent = _agent_registry().get(agent_id)
+    invocation = invocation or RegisteredAgentInvokeRequest()
+    case = None
+    if agent_id == "triage-agent" and invocation.include_case:
+        case = _run_or_raise(
+            lambda: FraudInvestigationFleet(settings).investigate(
+                invocation.transaction_id,
+                request,
+            )
+        )
     return {
         "agent_id": agent.agent_id,
         "display_name": agent.display_name,
@@ -170,8 +185,16 @@ def invoke_registered_agent(
             "This endpoint is the Agent Registry invocation surface. "
             "TraceLayer runs the actual tool through the internal AgentGateway and ADK Runner."
         ),
+        "transaction_id": invocation.transaction_id,
+        "case_id": case.case_id if case else None,
+        "risk_score": case.risk_score if case else None,
+        "priority": case.priority if case else None,
         "allowed_tools": agent.allowed_tools,
         "managed_gateway_policy": agent.managed_gateway_policy,
+        "identity_provider": agent.identity_provider,
+        "identity_status": agent.identity_status,
+        "runtime_resource": agent.runtime_resource,
+        "agent_principal": agent.agent_principal,
     }
 
 
@@ -387,6 +410,8 @@ def _agent_registry(request: Request | None = None) -> AgentRegistry:
         project_id=settings.google_cloud_project,
         region=region,
         service_url=service_url,
+        triage_agent_engine_resource=settings.triage_agent_engine_resource,
+        triage_agent_runtime_principal=settings.triage_agent_runtime_principal,
     )
 
 

@@ -30,6 +30,10 @@ spec:
               value: global
             - name: PUBLIC_SERVICE_URL
               value: https://tracelayer-api-235426782310.us-central1.run.app
+            - name: TRIAGE_AGENT_ENGINE_RESOURCE
+              value: ""
+            - name: TRIAGE_AGENT_RUNTIME_PRINCIPAL
+              value: ""
             - name: MODEL_ARMOR_BACKEND
               value: google
             - name: MODEL_ARMOR_LOCATION

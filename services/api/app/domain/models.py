@@ -129,8 +129,10 @@ class AgentIdentity(BaseModel):
     allowed_tools: list[str] = Field(default_factory=list)
     data_region: str = "us-central1"
     registry_resource: str | None = None
+    runtime_resource: str | None = None
     agent_principal: str | None = None
     identity_provider: str = "google-cloud-iam"
+    identity_status: str = "metadata_declared"
     managed_gateway_policy: str = "audit-only"
     health_status: str = "healthy"
     last_updated: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -196,6 +198,11 @@ class MissingDataRequest(BaseModel):
 class LongRunningAdvanceRequest(BaseModel):
     stage: str = Field(default="next", pattern="^(next|day3|day7|day14)$")
     note: str | None = Field(default=None, max_length=500)
+
+
+class RegisteredAgentInvokeRequest(BaseModel):
+    transaction_id: str = "tx-9001"
+    include_case: bool = True
 
 
 class PubSubPushMessage(BaseModel):

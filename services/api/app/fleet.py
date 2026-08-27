@@ -84,8 +84,14 @@ class FraudInvestigationFleet:
         self.settings = settings
         self.registry = AgentRegistry(
             project_id=settings.google_cloud_project,
-            region=settings.google_cloud_location if settings.google_cloud_location != "global" else "us-central1",
+            region=(
+                settings.google_cloud_location
+                if settings.google_cloud_location != "global"
+                else "us-central1"
+            ),
             service_url=settings.public_service_url,
+            triage_agent_engine_resource=settings.triage_agent_engine_resource,
+            triage_agent_runtime_principal=settings.triage_agent_runtime_principal,
         )
         self.repository = repository or InvestigationRepository()
         self.report_writer = report_writer or ReportWriter()

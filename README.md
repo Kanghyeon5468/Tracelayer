@@ -26,8 +26,8 @@ A bank can benefit from fraud patterns learned across a federation without seein
 | Dashboard | `/dashboard` shows case summary, generated investigation plan, agent findings, ADK Runner metadata, privacy-separated federated risk, interactive 3D network graph, campaign detection, compliance, approval state, async job state, and Agent Registry. |
 | Admin Console | `/admin` lists pending approvals and approval history. Supervisors can approve, deny, request more evidence, and save risk thresholds. |
 | Google ADK | Triage, Network, Campaign Trace, and Case Manager tools run through `google.adk.runners.Runner` with `InMemorySessionService` when ADK is available. |
-| Agent Registry | `/agents` exposes lifecycle metadata, owner departments, approved versions, deployed runtime, allowed tools, data region, registry resource, and agent principal metadata. `/a2a/triage-agent/agent-card.json` can be registered in Google Cloud Agent Registry. |
-| Agent Identity | Triage and Compliance use separate agent identity metadata. Triage is scoped for BigQuery transaction reads; Compliance is scoped for policy, audit, and PII review without BigQuery read. |
+| Agent Registry | `/agents` exposes lifecycle metadata, owner departments, approved versions, deployed runtime, allowed tools, data region, registry resource, runtime resource, and agent principal metadata. `/a2a/triage-agent/agent-card.json` is registerable in Google Cloud Agent Registry. |
+| Agent Identity | Triage and Compliance use separate identity scopes. Triage is scoped for BigQuery transaction reads; Compliance is scoped for policy, audit, and PII review without BigQuery read. `services/adk/triage_agent` can be deployed to Agent Engine to bind a verified Agent Runtime SPIFFE principal. |
 | Gemini Planning | Case Manager asks Gemini for a structured JSON investigation plan after Triage and post-Network findings, then validates it against policy before execution. |
 | Vertex AI Gemini | Backend-only Gemini access is supported through Vertex AI using `gemini-3.5-flash`. |
 | Firestore | Persists case snapshots, approvals, risk policy, and async investigation jobs in deployed mode. |
@@ -123,7 +123,7 @@ The actual fraud tool still runs behind the Agent Gateway, so authorization, gua
 
 ## Agent Registry, Identity, And Gateway Governance
 
-TraceLayer exposes each internal fleet member as a governed catalog entry through `/agents`. The registry view includes owner department, lifecycle status, approved version, deployed runtime, allowed tools, data region, service account, registry resource, agent principal metadata, and managed gateway policy.
+TraceLayer exposes each internal fleet member as a governed catalog entry through `/agents`. The registry view includes owner department, lifecycle status, approved version, deployed runtime, allowed tools, data region, service account, registry resource, Agent Engine runtime resource, agent principal metadata, identity status, and managed gateway policy.
 
 The Triage Agent also exposes an A2A Agent Card:
 
@@ -155,6 +155,29 @@ Identity separation is visible in the registry metadata and gateway audit events
 | Triage Agent | `tracelayer-triage-agent@PROJECT_ID.iam.gserviceaccount.com` | `score_transaction`, `compute_federated_intelligence`, `bigquery_read_transactions` | Approval writes, compliance audit mutation |
 | Compliance Agent | `tracelayer-compliance-agent@PROJECT_ID.iam.gserviceaccount.com` | `check_policy_and_pii`, `redact_case_view`, `read_audit_chain` | BigQuery transaction read, graph search |
 
+For verified Google-managed Agent Runtime identity, deploy the standalone Triage ADK package:
+
+```bash
+services/api/.venv/bin/adk deploy agent_engine \
+  --project=project-6ecbea1e-e0c3-4325-a63 \
+  --region=us-central1 \
+  --display_name="TraceLayer Triage Agent Runtime" \
+  --description="Google ADK Agent Runtime deployment for TraceLayer's Triage Agent." \
+  --otel_to_cloud \
+  services/adk/triage_agent
+```
+
+Then set the returned Agent Engine resource and Agent Identity principal on the Cloud Run backend:
+
+```bash
+gcloud run services update tracelayer-api \
+  --region=us-central1 \
+  --project=project-6ecbea1e-e0c3-4325-a63 \
+  --update-env-vars TRIAGE_AGENT_ENGINE_RESOURCE=projects/PROJECT/locations/us-central1/reasoningEngines/ENGINE_ID,TRIAGE_AGENT_RUNTIME_PRINCIPAL=principal://agents.global.org-ORG_ID.system.id.goog/resources/aiplatform/projects/PROJECT_NUMBER/locations/us-central1/reasoningEngines/ENGINE_ID
+```
+
+When those values are configured, the Agent Registry UI shows `Verified Agent Runtime` for Triage instead of `Metadata Declared`.
+
 The intended production layering is:
 
 ```text
@@ -167,6 +190,7 @@ Google ADK Runner
 ```
 
 Detailed setup notes are in [infra/agent-registry/README.md](infra/agent-registry/README.md).
+Agent Engine deployment notes are in [infra/agent-registry/agent-engine-triage.md](infra/agent-registry/agent-engine-triage.md).
 
 ## Embedded Veritas Federated Intelligence
 
@@ -593,6 +617,8 @@ See [.env.example](.env.example) for the full local template.
 | `GOOGLE_CLOUD_PROJECT` | Project for Cloud Run, Vertex AI, Firestore, Pub/Sub, and BigQuery. |
 | `GOOGLE_CLOUD_LOCATION` | Vertex AI region. |
 | `PUBLIC_SERVICE_URL` | Public Cloud Run base URL used in A2A Agent Cards and registry bootstrap metadata. |
+| `TRIAGE_AGENT_ENGINE_RESOURCE` | Optional Agent Engine `reasoningEngines/*` resource for the deployed Triage Agent Runtime. |
+| `TRIAGE_AGENT_RUNTIME_PRINCIPAL` | Optional Google Agent Runtime SPIFFE principal for verified Triage Agent Identity. |
 | `ADK_ENABLED` | Enables Google ADK definitions and Runner-backed tool execution. |
 | `ADK_MODEL` | Optional ADK model override. |
 | `MODEL_ARMOR_BACKEND` | Selects `auto`, `local`, or `google`. |

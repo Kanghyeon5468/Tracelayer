@@ -1,0 +1,2 @@
+google-adk[a2a,agent-identity]==2.8.0
+google-cloud-aiplatform[adk,agent_engines]
