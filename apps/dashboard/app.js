@@ -187,6 +187,20 @@ const titleCase = (value) =>
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
+const conciseSummary = (value, limit = 118) => {
+  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+  const firstSentence = normalized.match(/^.*?[.!?](\s|$)/)?.[0]?.trim() || normalized;
+  return firstSentence.length > limit ? `${firstSentence.slice(0, limit - 3)}...` : firstSentence;
+};
+
 const renderAdkRuntime = (runtime) => {
   if (!runtime) {
     return "";
@@ -262,74 +276,170 @@ const renderNetworkGraph = (graph) => {
   const nodes = graph.nodes.slice(0, 18);
   const edgeCount = (graph.edges || []).length;
   return `
-    <div class="fraud-map" aria-label="Live fraud network graph">
-      <div class="fraud-map-legend" aria-label="Graph legend">
+    <div class="network-graph-stage">
+      <div class="network-graph-viewport" aria-label="Interactive 3D fraud network graph"></div>
+      <aside class="graph-selection">
+        <span>Selected Node</span>
+        <strong>Network Overview</strong>
+        <p>${nodes.length} nodes · ${edgeCount} edges · Live shared graph</p>
+      </aside>
+      <div class="graph-legend">
         <span><i class="legend-dot account"></i>Account</span>
         <span><i class="legend-dot device"></i>Device</span>
         <span><i class="legend-dot merchant"></i>Merchant</span>
         <span><i class="legend-dot exchange"></i>Exchange</span>
         <span><i class="legend-line transaction"></i>Transaction</span>
-        <span><i class="legend-line shared"></i>Shared Link</span>
       </div>
-      <svg class="fraud-map-lines" viewBox="0 0 1000 380" role="img" aria-label="${nodes.length} nodes and ${edgeCount} edges">
-        <line class="map-line transaction" x1="115" y1="190" x2="265" y2="190" />
-        <line class="map-line transaction" x1="310" y1="190" x2="575" y2="190" />
-        <line class="map-line transaction" x1="620" y1="190" x2="760" y2="190" />
-        <line class="map-line transaction" x1="805" y1="190" x2="925" y2="190" />
-        <line class="map-line shared" x1="290" y1="170" x2="460" y2="80" />
-        <line class="map-line shared" x1="290" y1="210" x2="465" y2="300" />
-        <line class="map-line transaction" x1="485" y1="95" x2="585" y2="170" />
-        <line class="map-line transaction" x1="485" y1="285" x2="585" y2="210" />
-      </svg>
-      <button class="fraud-node account account-a" type="button" data-node="Account A">
-        <span class="node-bubble"></span>
-        <strong>Account A</strong>
-        <small>**1234</small>
-        <em>High Risk</em>
-      </button>
-      <button class="fraud-node device device-x" type="button" data-node="Device X">
-        <span class="node-bubble"></span>
-        <strong>Device X</strong>
-        <small>Android</small>
-        <em>High Risk</em>
-      </button>
-      <button class="fraud-node account account-b" type="button" data-node="Account B">
-        <span class="node-bubble"></span>
-        <strong>Account B</strong>
-        <small>**5678</small>
-        <em>High Risk</em>
-      </button>
-      <button class="fraud-node account account-d" type="button" data-node="Account D">
-        <span class="node-bubble"></span>
-        <strong>Account D</strong>
-        <small>**9012</small>
-        <em class="medium">Medium Risk</em>
-      </button>
-      <button class="fraud-node account account-c" type="button" data-node="Account C">
-        <span class="node-bubble"></span>
-        <strong>Account C</strong>
-        <small>**3456</small>
-        <em>High Risk</em>
-      </button>
-      <button class="fraud-node merchant merchant-y" type="button" data-node="Merchant Y">
-        <span class="node-bubble"></span>
-        <strong>Merchant Y</strong>
-        <small>Online Store</small>
-        <em class="medium">Medium Risk</em>
-      </button>
-      <button class="fraud-node exchange exchange-z" type="button" data-node="Exchange Z">
-        <span class="node-bubble"></span>
-        <strong>Exchange Z</strong>
-        <small>Crypto Exchange</small>
-        <em>High Risk</em>
-      </button>
-      <div class="fraud-map-controls" aria-label="Graph controls">
-        <button class="secondary-action" type="button">□</button>
-        <button class="secondary-action" type="button">−</button>
-        <button class="secondary-action" type="button">+</button>
+      <div class="fraud-map-controls" aria-label="3D graph controls">
+        <button class="secondary-action graph-reset" type="button">□</button>
+        <button class="secondary-action graph-zoom-out" type="button">−</button>
+        <button class="secondary-action graph-zoom-in" type="button">+</button>
       </div>
     </div>
   `;
+};
+
+const handleFraudMapControlClick = (event) => {
+  const button = event.target.closest("[data-map-control]");
+  if (!button) {
+    return;
+  }
+  const map = button.closest(".fraud-map");
+  const svg = map?.querySelector(".fraud-map-svg");
+  if (!svg) {
+    return;
+  }
+
+  const action = button.dataset.mapControl;
+  const original = [0, 0, 1000, 500];
+  const current = (svg.getAttribute("viewBox") || original.join(" "))
+    .split(/\s+/)
+    .map(Number);
+  if (action === "reset" || current.length !== 4 || current.some(Number.isNaN)) {
+    svg.setAttribute("viewBox", original.join(" "));
+    return;
+  }
+
+  const scale = action === "zoom-in" ? 0.86 : 1.16;
+  const [x, y, width, height] = current;
+  const nextWidth = Math.min(1000, Math.max(560, width * scale));
+  const nextHeight = Math.min(500, Math.max(280, height * scale));
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const nextX = Math.min(Math.max(0, centerX - nextWidth / 2), 1000 - nextWidth);
+  const nextY = Math.min(Math.max(0, centerY - nextHeight / 2), 500 - nextHeight);
+  svg.setAttribute("viewBox", `${nextX} ${nextY} ${nextWidth} ${nextHeight}`);
+};
+
+const positionFraudMapNodes = (nodes) => {
+  const trigger = nodes.find((node) => node.type === "trigger_transaction") || nodes[0];
+  const related = nodes.filter((node) => node.type === "related_transaction" && node.id !== trigger.id);
+  const entities = nodes.filter((node) => node.type !== "related_transaction" && node.id !== trigger.id);
+  const hub =
+    entities.find((node) => ["device", "ip", "email"].includes(node.type)) ||
+    entities[0];
+  const rightEntities = entities.filter((node) => node.id !== hub?.id);
+  const positioned = [];
+
+  if (trigger) {
+    positioned.push({ ...trigger, x: 118, y: 230, kind: "account" });
+  }
+  if (hub) {
+    positioned.push({ ...hub, x: 265, y: 220, kind: graphNodeKind(hub) });
+  }
+
+  const relatedSlots = [
+    { x: 410, y: 88 },
+    { x: 410, y: 330 },
+    { x: 560, y: 220 },
+    { x: 555, y: 88 },
+    { x: 555, y: 330 },
+    { x: 705, y: 135 },
+    { x: 705, y: 305 },
+    { x: 840, y: 220 },
+  ];
+  related.forEach((node, index) => {
+    const slot = relatedSlots[index] || {
+      x: 410 + (index % 4) * 150,
+      y: index % 2 === 0 ? 105 : 330,
+    };
+    positioned.push({ ...node, ...slot, kind: "account" });
+  });
+
+  const entitySlots = [
+    { x: 735, y: 220 },
+    { x: 900, y: 220 },
+    { x: 735, y: 88 },
+    { x: 900, y: 330 },
+    { x: 900, y: 88 },
+    { x: 735, y: 330 },
+  ];
+  rightEntities.forEach((node, index) => {
+    const slot = entitySlots[index] || {
+      x: 735 + (index % 2) * 165,
+      y: 95 + (index % 3) * 118,
+    };
+    positioned.push({ ...node, ...slot, kind: graphNodeKind(node) });
+  });
+
+  return positioned;
+};
+
+const graphNodeKind = (node) => {
+  const value = `${node.type || ""} ${node.label || ""}`.toLowerCase();
+  if (value.includes("device") || value.includes("ip") || value.includes("email")) {
+    return "device";
+  }
+  if (value.includes("exchange") || value.includes("crypto")) {
+    return "exchange";
+  }
+  if (value.includes("merchant") || value.includes("counterparty")) {
+    return "merchant";
+  }
+  return "account";
+};
+
+const graphRiskLabel = (node) => {
+  if (node.type === "trigger_transaction") {
+    return "High Risk";
+  }
+  if (node.risk === "low") {
+    return "Low Risk";
+  }
+  if (node.risk === "medium") {
+    return "Medium Risk";
+  }
+  return node.risk === "shared" ? "Shared Signal" : "High Risk";
+};
+
+const renderFraudMapNode = (node) => {
+  const label = escapeHtml(String(node.label || node.id).slice(0, 18));
+  const detail = escapeHtml(String(node.id || "").slice(-6).padStart(6, "*"));
+  const risk = graphRiskLabel(node);
+  const riskClass = risk.toLowerCase().replaceAll(" ", "-");
+  return `
+    <g class="map-node ${node.kind} ${riskClass}" tabindex="0" transform="translate(${node.x} ${node.y})">
+      <circle class="map-node-glow" r="51"></circle>
+      <circle class="map-node-bubble" r="40"></circle>
+      ${renderFraudMapIcon(node.kind)}
+      <text class="map-node-label" y="72">${label}</text>
+      <text class="map-node-detail" y="97">${detail}</text>
+      <text class="map-node-risk" y="126">${escapeHtml(risk)}</text>
+    </g>
+  `;
+};
+
+const renderFraudMapIcon = (kind) => {
+  if (kind === "device") {
+    return '<rect class="map-icon" x="-12" y="-22" width="24" height="44" rx="5"></rect><line class="map-icon" x1="-7" y1="16" x2="7" y2="16"></line>';
+  }
+  if (kind === "merchant") {
+    return '<path class="map-icon filled" d="M-20 -13h30l15 17h-8l-9 20h-24z"></path>';
+  }
+  if (kind === "exchange") {
+    return '<rect class="map-icon filled" x="-22" y="6" width="9" height="18"></rect><rect class="map-icon filled" x="-5" y="-6" width="10" height="30"></rect><rect class="map-icon filled" x="14" y="-20" width="9" height="44"></rect><line class="map-icon" x1="-26" y1="0" x2="26" y2="0"></line>';
+  }
+  return '<circle class="map-icon filled" cx="0" cy="-12" r="10"></circle><path class="map-icon filled" d="M-21 20c4-14 12-20 21-20s17 6 21 20z"></path>';
 };
 
 const disposeNetworkGraph3d = () => {
@@ -392,7 +502,7 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
   scene.background = new THREE.Color(0x06101b);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.set(0, 1.0, 15.6);
+  camera.position.set(0, 1.1, 18.6);
 
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -403,8 +513,8 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
   viewport.replaceChildren(renderer.domElement);
 
   const graphGroup = new THREE.Group();
-  graphGroup.rotation.x = -0.38;
-  graphGroup.rotation.y = 0.72;
+  graphGroup.rotation.x = -0.42;
+  graphGroup.rotation.y = 0.68;
   scene.add(graphGroup);
 
   const ambientLight = new THREE.AmbientLight(0xffffff, 1.45);
@@ -442,23 +552,14 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
     });
 
   positionedNodes.forEach((node) => {
-    const tone = nodeTone(node.type);
-    const geometry = new THREE.SphereGeometry(node.type === "trigger_transaction" ? 0.3 : 0.18, 32, 18);
-    const material = new THREE.MeshStandardMaterial({
-      color: tone === "trigger" ? 0xb42318 : tone === "related" ? 0x0f766e : 0x3b5b7a,
-      roughness: 0.42,
-      metalness: 0.12,
-      emissive: tone === "trigger" ? 0x260402 : 0x000000,
-      emissiveIntensity: tone === "trigger" ? 0.2 : 0,
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(node.position);
-    mesh.userData = { node };
-    nodeMeshes.push(mesh);
-    graphGroup.add(mesh);
+    const icon = createIconNodeSprite(THREE, node);
+    icon.position.copy(node.position);
+    icon.userData = { node, baseScale: icon.scale.clone() };
+    nodeMeshes.push(icon);
+    graphGroup.add(icon);
 
-    const label = createLabelSprite(THREE, node.label);
-    label.position.copy(node.position).add(new THREE.Vector3(0, -0.68, 0));
+    const label = createLabelSprite(THREE, node);
+    label.position.copy(node.position).add(new THREE.Vector3(0, -1.15, 0.08));
     graphGroup.add(label);
   });
 
@@ -511,15 +612,24 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
   };
   const onWheel = (event) => {
     event.preventDefault();
-    camera.position.z = Math.max(9.2, Math.min(24, camera.position.z + event.deltaY * 0.008));
+    camera.position.z = Math.max(10.8, Math.min(28, camera.position.z + event.deltaY * 0.01));
   };
   const onReset = () => {
-    controls.targetRotationX = -0.38;
-    controls.targetRotationY = 0.72;
-    camera.position.set(0, 1.0, 15.6);
+    controls.targetRotationX = -0.42;
+    controls.targetRotationY = 0.68;
+    camera.position.set(0, 1.1, 18.6);
     updateGraphSelection(selection, null, graph);
   };
+  const onZoomIn = () => {
+    camera.position.z = Math.max(10.8, camera.position.z - 1.4);
+  };
+  const onZoomOut = () => {
+    camera.position.z = Math.min(28, camera.position.z + 1.4);
+  };
   const resetButton = document.querySelector("#reset-graph-view");
+  const localResetButton = viewport.closest(".network-graph-stage")?.querySelector(".graph-reset");
+  const zoomInButton = viewport.closest(".network-graph-stage")?.querySelector(".graph-zoom-in");
+  const zoomOutButton = viewport.closest(".network-graph-stage")?.querySelector(".graph-zoom-out");
 
   viewport.addEventListener("pointerdown", onPointerDown);
   viewport.addEventListener("pointermove", onPointerMove);
@@ -527,6 +637,9 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
   viewport.addEventListener("wheel", onWheel, { passive: false });
   window.addEventListener("resize", resize);
   resetButton?.addEventListener("click", onReset);
+  localResetButton?.addEventListener("click", onReset);
+  zoomInButton?.addEventListener("click", onZoomIn);
+  zoomOutButton?.addEventListener("click", onZoomOut);
   cleanup.push(
     () => viewport.removeEventListener("pointerdown", onPointerDown),
     () => viewport.removeEventListener("pointermove", onPointerMove),
@@ -534,6 +647,9 @@ const createNetworkGraph3d = (THREE, graph, viewport, selection) => {
     () => viewport.removeEventListener("wheel", onWheel),
     () => window.removeEventListener("resize", resize),
     () => resetButton?.removeEventListener("click", onReset),
+    () => localResetButton?.removeEventListener("click", onReset),
+    () => zoomInButton?.removeEventListener("click", onZoomIn),
+    () => zoomOutButton?.removeEventListener("click", onZoomOut),
   );
 
   updateGraphSelection(selection, null, graph);
@@ -576,28 +692,30 @@ const positionGraphNodes3d = (THREE, nodes) => {
     const ring = Math.sqrt(Math.max(0, 1 - unitY * unitY));
     const theta = index * goldenAngle + phase;
     return new THREE.Vector3(
-      Math.cos(theta) * ring * radius * 1.12,
-      unitY * radius * 0.88,
-      Math.sin(theta) * ring * radius * 1.18,
+      Math.cos(theta) * ring * radius * 1.35,
+      unitY * radius * 0.98,
+      Math.sin(theta) * ring * radius * 1.55,
     );
   };
   const positioned = [
     {
       ...trigger,
+      kind: graphNodeKind(trigger),
       position: new THREE.Vector3(0, 0, 0.35),
     },
   ];
 
   orderedNodes.forEach((node, index) => {
     const isRelated = node.type === "related_transaction";
-    const radius = (isRelated ? 5.8 : 4.85) + (index % 4) * 0.42;
+    const radius = (isRelated ? 7.2 : 6.4) + (index % 4) * 0.58;
     const phase = isRelated ? 0.35 : 1.95;
     const position = scatterPosition(index, orderedNodes.length, radius, phase);
-    position.x += ((index % 3) - 1) * 0.28;
-    position.y += isRelated ? 0.32 : -0.24;
-    position.z += ((index % 5) - 2) * 0.55;
+    position.x += ((index % 3) - 1) * 0.62;
+    position.y += isRelated ? 0.56 : -0.48;
+    position.z += ((index % 5) - 2) * 0.9;
     positioned.push({
       ...node,
+      kind: graphNodeKind(node),
       position,
     });
   });
@@ -614,27 +732,112 @@ const createEdgeMesh = (THREE, source, target, material) => {
   return mesh;
 };
 
-const createLabelSprite = (THREE, label) => {
+const graphKindPalette = (kind) => {
+  if (kind === "device") {
+    return { fill: "#14532d", stroke: "#67d06a", icon: "#b8f7b4" };
+  }
+  if (kind === "merchant") {
+    return { fill: "#7c4a0d", stroke: "#ffab38", icon: "#ffd08a" };
+  }
+  if (kind === "exchange") {
+    return { fill: "#4c1d95", stroke: "#8b5cf6", icon: "#c4b5fd" };
+  }
+  return { fill: "#0e4fa8", stroke: "#2f93ff", icon: "#c8e2ff" };
+};
+
+const createIconNodeSprite = (THREE, node) => {
+  const size = 256;
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 64;
+  canvas.width = size;
+  canvas.height = size;
   const context = canvas.getContext("2d");
-  context.fillStyle = "rgba(9, 24, 39, 0.94)";
-  context.strokeStyle = "rgba(47, 147, 255, 0.48)";
-  context.lineWidth = 3;
+  const palette = graphKindPalette(node.kind);
+  const center = size / 2;
+
+  context.shadowColor = palette.stroke;
+  context.shadowBlur = 28;
+  context.fillStyle = `${palette.fill}cc`;
+  context.strokeStyle = palette.stroke;
+  context.lineWidth = 9;
   context.beginPath();
-  context.roundRect(4, 8, 248, 44, 10);
+  context.arc(center, center, 72, 0, Math.PI * 2);
   context.fill();
   context.stroke();
-  context.fillStyle = "#edf6ff";
-  context.font = "700 27px Inter, system-ui, sans-serif";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText(String(label).slice(0, 20), 128, 31);
+
+  context.shadowBlur = 0;
+  context.fillStyle = palette.icon;
+  context.strokeStyle = palette.icon;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  if (node.kind === "device") {
+    context.lineWidth = 8;
+    context.beginPath();
+    context.roundRect(102, 72, 52, 96, 10);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(116, 148);
+    context.lineTo(140, 148);
+    context.stroke();
+  } else if (node.kind === "merchant") {
+    context.beginPath();
+    context.moveTo(76, 90);
+    context.lineTo(144, 90);
+    context.lineTo(184, 130);
+    context.lineTo(168, 130);
+    context.lineTo(148, 172);
+    context.lineTo(88, 172);
+    context.closePath();
+    context.fill();
+  } else if (node.kind === "exchange") {
+    context.fillRect(78, 138, 24, 42);
+    context.fillRect(116, 112, 24, 68);
+    context.fillRect(154, 84, 24, 96);
+  } else {
+    context.beginPath();
+    context.arc(128, 98, 26, 0, Math.PI * 2);
+    context.fill();
+    context.beginPath();
+    context.moveTo(74, 170);
+    context.quadraticCurveTo(128, 110, 182, 170);
+    context.closePath();
+    context.fill();
+  }
+
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(1.06, 0.28, 1);
+  const scale = node.type === "trigger_transaction" ? 1.75 : 1.48;
+  sprite.scale.set(scale, scale, 1);
+  return sprite;
+};
+
+const createLabelSprite = (THREE, node) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 384;
+  canvas.height = 150;
+  const context = canvas.getContext("2d");
+  const label = String(node.label || node.id).slice(0, 22);
+  const detail = String(node.id || "").slice(-6).padStart(6, "*");
+  const risk = graphRiskLabel(node);
+
+  context.shadowColor = "rgba(0, 0, 0, 0.95)";
+  context.shadowBlur = 9;
+  context.fillStyle = "#edf6ff";
+  context.font = "900 35px Inter, system-ui, sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(label, 192, 38);
+  context.fillStyle = "#c8d7e8";
+  context.font = "800 24px Inter, system-ui, sans-serif";
+  context.fillText(detail, 192, 72);
+  context.fillStyle = risk === "High Risk" ? "#ff5d55" : "#3fb7ff";
+  context.font = "900 27px Inter, system-ui, sans-serif";
+  context.fillText(risk.toUpperCase(), 192, 112);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(2.5, 0.98, 1);
   return sprite;
 };
 
@@ -655,14 +858,22 @@ const selectGraphNode = (
   raycaster.setFromCamera(pointer, camera);
   const intersections = raycaster.intersectObjects(nodeMeshes, false);
   nodeMeshes.forEach((mesh) => {
-    mesh.scale.setScalar(1);
+    if (mesh.userData.baseScale) {
+      mesh.scale.copy(mesh.userData.baseScale);
+    } else {
+      mesh.scale.setScalar(1);
+    }
   });
   if (!intersections.length) {
     updateGraphSelection(selection, null);
     return;
   }
   const mesh = intersections[0].object;
-  mesh.scale.setScalar(1.22);
+  if (mesh.userData.baseScale) {
+    mesh.scale.copy(mesh.userData.baseScale).multiplyScalar(1.16);
+  } else {
+    mesh.scale.setScalar(1.22);
+  }
   updateGraphSelection(selection, mesh.userData.node);
   graphGroup.rotation.y += 0.02;
 };
@@ -681,8 +892,8 @@ const updateGraphSelection = (selection, node, graph) => {
   }
   selection.innerHTML = `
     <span>${titleCase(node.type)}</span>
-    <strong>${node.label}</strong>
-    <p>${titleCase(node.risk || "linked")} signal · ${node.id}</p>
+    <strong>${escapeHtml(node.label)}</strong>
+    <p>${titleCase(node.risk || "linked")} signal · ${escapeHtml(node.id)}</p>
   `;
 };
 
@@ -828,6 +1039,54 @@ const renderAgentRegistry = (agents) => {
     .join("");
 };
 
+const activateDashboardTab = (tabName) => {
+  document.querySelectorAll("[data-tab]").forEach((button) => {
+    const active = button.dataset.tab === tabName;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll("[data-tab-panel]").forEach((panel) => {
+    const active = panel.dataset.tabPanel === tabName;
+    panel.classList.toggle("active", active);
+    panel.hidden = !active;
+  });
+};
+
+const handleDashboardTabClick = (event) => {
+  const button = event.target.closest("[data-tab]");
+  if (!button) {
+    return;
+  }
+  activateDashboardTab(button.dataset.tab);
+};
+
+const renderTimeline = (items) =>
+  (items || [])
+    .map(
+      (item) => `
+        <div class="event">
+          <time>${new Date(item.timestamp).toLocaleString()}</time>
+          <div>
+            <strong>${titleCase(item.event_type)}</strong>
+            <p>${escapeHtml(item.description)}</p>
+          </div>
+        </div>
+      `,
+    )
+    .join("") || '<div class="item"><strong>No evidence</strong><p>No timeline events were recorded.</p></div>';
+
+const renderComplianceFindings = (items) =>
+  (items || [])
+    .map(
+      (item) => `
+        <div class="item">
+          <strong>${titleCase(item.severity)}: ${escapeHtml(item.finding_id)}</strong>
+          <p>${escapeHtml(item.description)} ${escapeHtml(item.required_action)}</p>
+        </div>
+      `,
+    )
+    .join("") || '<div class="item"><strong>No findings</strong><p>No compliance findings were recorded.</p></div>';
+
 const renderCase = (caseData) => {
   currentCaseId = caseData.case_id;
   localStorage.setItem("tracelayer.currentCaseId", currentCaseId);
@@ -841,15 +1100,18 @@ const renderCase = (caseData) => {
 
   document.querySelector("#agent-findings").innerHTML = caseData.agent_outputs
     .map(
-      (item) => `
+      (item) => {
+        const summary = escapeHtml(conciseSummary(item.summary));
+        return `
         <div class="item">
           <strong>${titleCase(item.agent_id)}</strong>
-          <p>${item.summary}</p>
+          <p>${summary}</p>
           ${renderPlannerRuntime(item.data?.planner_runtime)}
           ${renderModelArmorDemo(item.data?.model_armor_demo)}
           ${renderAdkRuntime(item.data?.adk_runtime)}
         </div>
-      `,
+      `;
+      },
     )
     .join("");
 
@@ -889,7 +1151,7 @@ const renderCase = (caseData) => {
   document.querySelector("#network-graph").innerHTML = renderNetworkGraph(
     networkOutput?.data?.network_graph,
   );
-  disposeNetworkGraph3d();
+  mountNetworkGraph3d(networkOutput?.data?.network_graph);
   document.querySelector("#campaign-detection").innerHTML = renderCampaignDetection(
     networkOutput?.data?.campaign_detection,
   );
@@ -900,7 +1162,7 @@ const renderCase = (caseData) => {
   const topPattern = signal?.node_indicators?.[0]
     ? titleCase(signal.node_indicators[0].split(":").pop())
     : "No External Pattern";
-  document.querySelector("#federated-signal").innerHTML = signal
+  const federatedHtml = signal
     ? `
       <div class="federated-section">
         <h3>Federated Intelligence</h3>
@@ -946,31 +1208,16 @@ const renderCase = (caseData) => {
       </div>
     `
     : '<div class="item"><strong>No signal</strong><p>No federated signal was attached.</p></div>';
+  document.querySelector("#federated-signal").innerHTML = federatedHtml;
+  document.querySelector("#federated-detail").innerHTML = federatedHtml;
 
-  document.querySelector("#timeline").innerHTML = caseData.evidence_timeline
-    .map(
-      (item) => `
-        <div class="event">
-          <time>${new Date(item.timestamp).toLocaleString()}</time>
-          <div>
-            <strong>${titleCase(item.event_type)}</strong>
-            <p>${item.description}</p>
-          </div>
-        </div>
-      `,
-    )
-    .join("");
+  const timelineHtml = renderTimeline(caseData.evidence_timeline);
+  document.querySelector("#timeline").innerHTML = timelineHtml;
+  document.querySelector("#evidence-tab-timeline").innerHTML = timelineHtml;
 
-  document.querySelector("#compliance").innerHTML = caseData.compliance_findings
-    .map(
-      (item) => `
-        <div class="item">
-          <strong>${titleCase(item.severity)}: ${item.finding_id}</strong>
-          <p>${item.description} ${item.required_action}</p>
-        </div>
-      `,
-    )
-    .join("");
+  const complianceHtml = renderComplianceFindings(caseData.compliance_findings);
+  document.querySelector("#compliance").innerHTML = complianceHtml;
+  document.querySelector("#compliance-detail").innerHTML = complianceHtml;
 
   const guardrailItems = caseData.guardrail_findings || [];
   document.querySelector("#guardrails").innerHTML = guardrailItems.length
@@ -999,6 +1246,20 @@ const renderCase = (caseData) => {
       }
     `
     : "<p>No approval request has been created.</p>";
+  document.querySelector("#audit-summary").innerHTML = `
+    <div class="item">
+      <strong>Audit Chain</strong>
+      <p>${escapeHtml(caseData.audit_chain_tip || "Pending")}</p>
+    </div>
+    <div class="item">
+      <strong>Memory Snapshot</strong>
+      <p>${escapeHtml(caseData.memory_snapshot_id || "Pending")}</p>
+    </div>
+    <div class="item">
+      <strong>Report</strong>
+      <p>${escapeHtml(caseData.report_path || "Not generated")}</p>
+    </div>
+  `;
 };
 
 const loadRuntimeConfig = async () => {
@@ -1209,6 +1470,8 @@ window.addEventListener("storage", (event) => {
 document.querySelector("#run-demo").addEventListener("click", runDemo);
 document.querySelector("#run-attack-demo").addEventListener("click", runAttackDemo);
 document.querySelector("#run-async-demo").addEventListener("click", runAsyncDemo);
+document.addEventListener("click", handleFraudMapControlClick);
+document.addEventListener("click", handleDashboardTabClick);
 renderCase(fallbackCase);
 loadRuntimeConfig();
 loadAgentRegistry();

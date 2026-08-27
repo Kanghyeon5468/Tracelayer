@@ -61,7 +61,7 @@ The dashboard renders the selected `Agent-generated Investigation Plan` so the d
 9. The fleet executes only the selected handlers: Network, Evidence, Compliance, approval request, pause, or close.
 10. If Network detects a strong campaign cluster, the Case Manager replans again and adds `trace_cluster_funds` before evidence and compliance.
 11. `MemoryBank` or `FirestoreMemoryBank` persists the case snapshot, approval state, and audit-visible output.
-12. The dashboard receives live updates and renders the 3D network graph, fraud campaign detection, guardrail findings, ADK Runner metadata, and approval state.
+12. The dashboard receives live updates and renders the Network Agent 3D graph, fraud campaign detection, guardrail findings, ADK Runner metadata, and approval state.
 
 ## Enterprise Fleet Concepts
 

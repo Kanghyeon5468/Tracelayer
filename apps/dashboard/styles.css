@@ -774,7 +774,8 @@ label {
 .item strong {
   display: block;
   margin-bottom: 4px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .item p,
@@ -782,7 +783,8 @@ label {
   margin: 0;
   color: var(--muted);
   line-height: 1.5;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .timeline {
@@ -792,8 +794,8 @@ label {
 
 .event {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 6px;
   border-top: 1px solid var(--line);
   padding-top: 12px;
 }
@@ -829,7 +831,7 @@ label {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -847,7 +849,8 @@ label {
 .summary-item strong,
 .campaign-metrics strong {
   display: block;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .privacy-metric {
@@ -857,7 +860,7 @@ label {
 
 .privacy-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
 }
 
@@ -907,16 +910,14 @@ label {
 }
 
 .network-graph-stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.28fr);
-  gap: 14px;
-  align-items: stretch;
+  position: relative;
+  min-height: 520px;
 }
 
 .network-graph-viewport {
   position: relative;
   width: 100%;
-  min-height: 390px;
+  min-height: 520px;
   overflow: hidden;
   border: 1px solid rgba(47, 147, 255, 0.12);
   border-radius: 8px;
@@ -950,12 +951,21 @@ label {
 }
 
 .graph-selection {
+  position: absolute;
+  z-index: 4;
+  left: 18px;
+  bottom: 18px;
   display: grid;
   align-content: start;
   gap: 6px;
+  width: min(280px, calc(100% - 220px));
   min-width: 0;
+  border: 1px solid rgba(47, 147, 255, 0.22);
   border-left: 3px solid var(--accent);
-  padding: 4px 0 4px 12px;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: rgba(4, 15, 26, 0.78);
+  backdrop-filter: blur(8px);
 }
 
 .graph-selection span {
@@ -977,13 +987,17 @@ label {
 }
 
 .graph-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 14px;
+  position: absolute;
+  z-index: 4;
+  top: 24px;
+  right: 28px;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 12px 22px;
   align-items: center;
-  margin-top: 12px;
-  color: var(--muted);
-  font-size: 0.8rem;
+  margin-top: 0;
+  color: var(--soft);
+  font-size: 0.78rem;
   font-weight: 800;
 }
 
@@ -1018,7 +1032,7 @@ label {
 
 .fraud-map {
   position: relative;
-  min-height: 405px;
+  min-height: 460px;
   overflow: hidden;
   border: 1px solid rgba(47, 147, 255, 0.14);
   border-radius: 8px;
@@ -1091,6 +1105,14 @@ label {
   height: 100%;
 }
 
+.fraud-map-svg {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+}
+
 .map-line {
   stroke: rgba(197, 212, 228, 0.42);
   stroke-linecap: round;
@@ -1100,6 +1122,110 @@ label {
 .map-line.shared {
   stroke-dasharray: 5 7;
   stroke: rgba(142, 163, 185, 0.58);
+}
+
+.map-node {
+  cursor: pointer;
+  outline: none;
+}
+
+.map-node-glow {
+  fill: rgba(47, 147, 255, 0.14);
+}
+
+.map-node-bubble {
+  fill: rgba(14, 79, 168, 0.78);
+  stroke: #2f93ff;
+  stroke-width: 3;
+}
+
+.map-node.device .map-node-glow {
+  fill: rgba(103, 208, 106, 0.13);
+}
+
+.map-node.device .map-node-bubble {
+  fill: rgba(22, 101, 52, 0.78);
+  stroke: #67d06a;
+}
+
+.map-node.merchant .map-node-glow {
+  fill: rgba(255, 171, 56, 0.14);
+}
+
+.map-node.merchant .map-node-bubble {
+  fill: rgba(146, 87, 13, 0.78);
+  stroke: #ffab38;
+}
+
+.map-node.exchange .map-node-glow {
+  fill: rgba(139, 92, 246, 0.15);
+}
+
+.map-node.exchange .map-node-bubble {
+  fill: rgba(76, 29, 149, 0.78);
+  stroke: #8b5cf6;
+}
+
+.map-icon {
+  fill: none;
+  stroke: #c8e2ff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.map-icon.filled {
+  fill: #c8e2ff;
+  stroke: none;
+}
+
+.map-node.device .map-icon {
+  stroke: #b8f7b4;
+}
+
+.map-node.merchant .map-icon.filled {
+  fill: #ffd08a;
+}
+
+.map-node.exchange .map-icon,
+.map-node.exchange .map-icon.filled {
+  fill: #c4b5fd;
+  stroke: #c4b5fd;
+}
+
+.map-node-label,
+.map-node-detail,
+.map-node-risk {
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(6, 16, 27, 0.92);
+  stroke-width: 5px;
+}
+
+.map-node-label {
+  fill: var(--ink);
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.map-node-detail {
+  fill: var(--soft);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.map-node-risk {
+  fill: #ff5d55;
+  font-size: 19px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.map-node.medium-risk .map-node-risk,
+.map-node.low-risk .map-node-risk,
+.map-node.shared-signal .map-node-risk {
+  fill: #3fb7ff;
+  text-transform: none;
 }
 
 .fraud-node {
@@ -1317,8 +1443,81 @@ label {
 
 .campaign-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 10px;
+}
+
+.dashboard-tabs {
+  padding: 0;
+}
+
+.tab-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.tab-strip button {
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 18px 16px;
+  background: transparent;
+  color: var(--soft);
+  box-shadow: none;
+  cursor: pointer;
+  font-weight: 800;
+  text-align: center;
+}
+
+.tab-strip button:hover,
+.tab-strip button:focus-visible {
+  background: rgba(47, 147, 255, 0.06);
+  color: var(--ink);
+  outline: none;
+}
+
+.tab-strip button.active {
+  border-bottom: 2px solid var(--accent);
+  background: rgba(47, 147, 255, 0.08);
+  color: var(--ink);
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+.tab-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.tab-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  max-height: 640px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(2, 8, 14, 0.28);
+  padding: 16px;
+}
+
+.tab-card h2 {
+  margin-bottom: 2px;
+}
+
+.wide-tab-card {
+  grid-column: 1 / -1;
+  max-height: none;
 }
 
 .registry-grid {

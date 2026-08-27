@@ -23,7 +23,7 @@ A bank can benefit from fraud patterns learned across a federation without seein
 | --- | --- |
 | Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
 | Prompt Demo | `/demo` converts a human-written fraud scenario into synthetic transaction records, then runs the same agent fleet and live-syncs the result to the dashboard/admin consoles. |
-| Dashboard | `/dashboard` shows case summary, generated investigation plan, agent findings, ADK Runner metadata, privacy-separated federated risk, 3D network graph, campaign detection, compliance, approval state, async job state, and Agent Registry. |
+| Dashboard | `/dashboard` shows case summary, generated investigation plan, agent findings, ADK Runner metadata, privacy-separated federated risk, interactive 3D network graph, campaign detection, compliance, approval state, async job state, and Agent Registry. |
 | Admin Console | `/admin` lists pending approvals and approval history. Supervisors can approve, deny, request more evidence, and save risk thresholds. |
 | Google ADK | Triage, Network, Campaign Trace, and Case Manager tools run through `google.adk.runners.Runner` with `InMemorySessionService` when ADK is available. |
 | Gemini Planning | Case Manager asks Gemini for a structured JSON investigation plan after Triage and post-Network findings, then validates it against policy before execution. |
@@ -86,6 +86,7 @@ Current strategies:
 | `triage_first_routing` | Every new case before risk is known. | Case Manager -> Triage |
 | `lightweight_review` | Low-risk cases. | Triage -> Compliance -> Close |
 | `manual_review` | Medium-risk cases. | Triage -> Evidence -> Compliance -> Manual Review |
+| `manual_network_review` | Medium-risk cases with shared device, IP, email, account, counterparty, or velocity signals. | Triage -> Federated Intelligence -> Network -> Evidence -> Compliance -> Manual Review |
 | `deep_network_investigation` | High or critical cases. | Triage -> Federated Intelligence -> Network -> Evidence -> Compliance -> Supervisor Approval |
 | `campaign_escalation_replan` | Network finds a strong campaign cluster. | Triage -> Federated Intelligence -> Network -> Trace Cluster Funds -> Evidence -> Compliance -> Supervisor Approval |
 | `pause_for_more_data` | Required transaction data is missing. | Triage -> Request More Data -> Pause |

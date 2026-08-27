@@ -24,7 +24,7 @@ TraceLayer turns one suspicious transaction into an auditable investigation case
 1. Show the privacy-separated `Federated Intelligence` panel.
 2. Point out that contributing organizations are counted, but external customer records exposed remains zero.
 3. Show `Local Investigation Evidence` separately.
-4. Rotate and zoom the interactive 3D network graph.
+4. Rotate, zoom, and inspect the live 3D network graph generated from the Network Agent output.
 5. Show `Fraud Campaign Detection` and shared infrastructure links.
 6. Open Agent Findings and point out `Google ADK Runner` session/tool metadata on Triage, Network, and Case Manager outputs.
 

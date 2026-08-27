@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TraceLayer Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260827-compact-graph" />
+    <link rel="stylesheet" href="./styles.css?v=20260827-active-tabs" />
   </head>
   <body class="app-body">
     <main class="app-shell">
@@ -82,36 +82,95 @@
           </article>
 
           <article class="panel wide dashboard-tabs">
-            <nav class="tab-strip" aria-label="Case detail sections">
-              <span class="active">Overview</span>
-              <span>Evidence</span>
-              <span>Federated Intelligence</span>
-              <span>Compliance</span>
-              <span>Agent Trace</span>
-              <span>Audit</span>
+            <nav class="tab-strip" aria-label="Case detail sections" role="tablist">
+              <button class="active" type="button" role="tab" aria-selected="true" data-tab="overview">Overview</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="evidence">Evidence</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="federated">Federated Intelligence</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="compliance">Compliance</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="agent-trace">Agent Trace</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="audit">Audit</button>
             </nav>
-            <div class="tab-card-grid">
-              <section class="tab-card">
-                <h2>Case Overview</h2>
-                <div id="campaign-detection" class="campaign-detection"></div>
-              </section>
-              <section class="tab-card">
-                <h2>Risk Summary</h2>
-                <div id="federated-signal" class="federated"></div>
-              </section>
-              <section class="tab-card">
-                <h2>Key Findings</h2>
-                <div id="timeline" class="timeline"></div>
-              </section>
-              <section class="tab-card">
-                <h2>Compliance Status</h2>
-                <div id="compliance" class="stack"></div>
-              </section>
-              <section class="tab-card wide-tab-card">
-                <h2>Agent Registry</h2>
-                <div id="agent-registry" class="registry-grid"></div>
-              </section>
-            </div>
+            <section class="tab-panel active" role="tabpanel" data-tab-panel="overview">
+              <div class="tab-card-grid">
+                <section class="tab-card">
+                  <h2>Case Overview</h2>
+                  <div id="campaign-detection" class="campaign-detection"></div>
+                </section>
+                <section class="tab-card">
+                  <h2>Risk Summary</h2>
+                  <div id="federated-signal" class="federated"></div>
+                </section>
+                <section class="tab-card">
+                  <h2>Key Findings</h2>
+                  <div id="timeline" class="timeline"></div>
+                </section>
+                <section class="tab-card">
+                  <h2>Compliance Status</h2>
+                  <div id="compliance" class="stack"></div>
+                </section>
+              </div>
+            </section>
+            <section class="tab-panel" role="tabpanel" data-tab-panel="evidence" hidden>
+              <div class="tab-card-grid">
+                <section class="tab-card">
+                  <h2>Evidence Timeline</h2>
+                  <div id="evidence-tab-timeline" class="timeline"></div>
+                </section>
+                <section class="tab-card">
+                  <h2>Network Links</h2>
+                  <div id="network-links" class="stack"></div>
+                </section>
+              </div>
+            </section>
+            <section class="tab-panel" role="tabpanel" data-tab-panel="federated" hidden>
+              <div class="tab-card-grid">
+                <section class="tab-card wide-tab-card">
+                  <h2>Federated Intelligence Detail</h2>
+                  <div id="federated-detail" class="federated"></div>
+                </section>
+              </div>
+            </section>
+            <section class="tab-panel" role="tabpanel" data-tab-panel="compliance" hidden>
+              <div class="tab-card-grid">
+                <section class="tab-card">
+                  <h2>Compliance Findings</h2>
+                  <div id="compliance-detail" class="stack"></div>
+                </section>
+                <section class="tab-card">
+                  <h2>Guardrails</h2>
+                  <div id="guardrails" class="stack"></div>
+                </section>
+              </div>
+            </section>
+            <section class="tab-panel" role="tabpanel" data-tab-panel="agent-trace" hidden>
+              <div class="tab-card-grid">
+                <section class="tab-card">
+                  <h2>Investigation Plan</h2>
+                  <div id="investigation-plan" class="stack"></div>
+                </section>
+                <section class="tab-card wide-tab-card">
+                  <h2>Agent Registry</h2>
+                  <div id="agent-registry" class="registry-grid"></div>
+                </section>
+              </div>
+            </section>
+            <section class="tab-panel" role="tabpanel" data-tab-panel="audit" hidden>
+              <div class="tab-card-grid">
+                <section class="tab-card">
+                  <h2>Async Job</h2>
+                  <div id="async-job" class="stack">
+                    <div class="item">
+                      <strong>No job queued</strong>
+                      <p>Async investigation status will appear here.</p>
+                    </div>
+                  </div>
+                </section>
+                <section class="tab-card">
+                  <h2>Audit Summary</h2>
+                  <div id="audit-summary" class="stack"></div>
+                </section>
+              </div>
+            </section>
           </article>
         </div>
 
@@ -125,36 +184,11 @@
           <h2>Human Approval Required</h2>
           <div id="approval" class="approval"></div>
         </article>
-
-        <article class="panel">
-          <h2>Agent-generated Investigation Plan</h2>
-          <div id="investigation-plan" class="stack"></div>
-        </article>
-
-        <article class="panel">
-          <h2>Network Links</h2>
-          <div id="network-links" class="stack"></div>
-        </article>
-
-        <article class="panel">
-          <h2>Guardrails</h2>
-          <div id="guardrails" class="stack"></div>
-        </article>
-
-        <article class="panel">
-          <h2>Async Job</h2>
-          <div id="async-job" class="stack">
-            <div class="item">
-              <strong>No job queued</strong>
-              <p>Async investigation status will appear here.</p>
-            </div>
-          </div>
-        </article>
         </aside>
       </section>
       </section>
     </main>
-    <script src="./config.js?v=20260827-reference-console"></script>
-    <script src="./app.js?v=20260827-reference-console"></script>
+    <script src="./config.js?v=20260827-active-tabs"></script>
+    <script src="./app.js?v=20260827-active-tabs"></script>
   </body>
 </html>

@@ -11,7 +11,7 @@ TraceLayer has moved beyond the initial prototype. The current repository contai
 | Google Cloud deployment | Cloud Run deployment assets, Cloud Build config, Pub/Sub push setup, Firestore state, BigQuery search boundary, and Vertex AI mode are present. |
 | Google ADK | Triage, Network, and Case Manager run approved tools through real Google ADK `Runner` sessions when `google-adk` is installed. |
 | Federated intelligence | Veritas-inspired secure aggregation, differential privacy accounting, campaign signature, and provenance hash are embedded in-process. |
-| Investigation UX | Dashboard shows the generated plan, ADK Runner session metadata, agent findings, privacy-separated federated signal, 3D network graph, campaign detection, compliance findings, live approval state, async job status, and Agent Registry. |
+| Investigation UX | Dashboard shows the generated plan, ADK Runner session metadata, agent findings, privacy-separated federated signal, interactive 3D network graph, campaign detection, compliance findings, live approval state, async job status, and Agent Registry. |
 | Admin UX | Supervisor page lists pending approvals and approval history, supports accept, deny, request more evidence, and saves risk thresholds. |
 | Human feedback | Requesting more evidence reruns Evidence, Compliance, and Case Manager, then creates a new approval request. |
 | Security demo | Prompt injection scenario `tx-9701` is blocked by the guardrail while the investigation continues from structured fields. |

@@ -41,6 +41,12 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             "check_policy_and_pii",
             "request_manual_review",
         },
+        "manual_network_review": {
+            "search_related_transactions",
+            "build_evidence_timeline",
+            "check_policy_and_pii",
+            "request_manual_review",
+        },
         "deep_network_investigation": {
             "search_related_transactions",
             "build_evidence_timeline",
@@ -211,37 +217,6 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
                 ],
             )
 
-        if context.priority == Priority.MEDIUM:
-            return InvestigationPlan(
-                plan_id=f"plan-{context.case_id}",
-                strategy="manual_review",
-                rationale=(
-                    "Medium-risk cases need local evidence and compliance review before "
-                    "a human analyst decides closure."
-                ),
-                steps=[
-                    completed_triage,
-                    InvestigationPlanStep(
-                        step_id="evidence",
-                        agent_id="evidence-agent",
-                        action="build_evidence_timeline",
-                        reason="Collect trigger and federated evidence for manual review.",
-                    ),
-                    InvestigationPlanStep(
-                        step_id="compliance",
-                        agent_id="compliance-agent",
-                        action="check_policy_and_pii",
-                        reason="Verify the evidence can be shown to authorized reviewers.",
-                    ),
-                    InvestigationPlanStep(
-                        step_id="approval",
-                        agent_id="case-manager-agent",
-                        action="request_manual_review",
-                        reason="Create a human review request before closure.",
-                    ),
-                ],
-            )
-
         if self._network_campaign_requires_replan(context):
             return InvestigationPlan(
                 plan_id=f"plan-{context.case_id}-campaign-escalation",
@@ -296,6 +271,89 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
                         agent_id="case-manager-agent",
                         action="request_supervisor_approval",
                         reason="Require supervisor approval before any outbound hold.",
+                    ),
+                ],
+            )
+
+        if context.priority == Priority.MEDIUM and self._has_network_discovery_signal(context):
+            return InvestigationPlan(
+                plan_id=f"plan-{context.case_id}",
+                strategy="manual_network_review",
+                rationale=(
+                    "Medium-risk cases with shared infrastructure or velocity signals need "
+                    "network discovery before evidence, compliance, and analyst review."
+                ),
+                steps=[
+                    completed_triage,
+                    InvestigationPlanStep(
+                        step_id="federated-intelligence",
+                        agent_id="triage-agent",
+                        action="compute_federated_intelligence",
+                        reason=(
+                            "Use the privacy-preserving Veritas signal already computed "
+                            "during triage before network review."
+                        ),
+                        status=PlanStepStatus.COMPLETED,
+                    ),
+                    InvestigationPlanStep(
+                        step_id="network",
+                        agent_id="network-agent",
+                        action="search_related_transactions",
+                        reason="Find shared accounts, devices, IPs, emails, and counterparties.",
+                        status=(
+                            PlanStepStatus.COMPLETED
+                            if context.related_transactions
+                            else PlanStepStatus.PLANNED
+                        ),
+                    ),
+                    InvestigationPlanStep(
+                        step_id="evidence",
+                        agent_id="evidence-agent",
+                        action="build_evidence_timeline",
+                        reason="Collect trigger, network, and federated evidence for manual review.",
+                    ),
+                    InvestigationPlanStep(
+                        step_id="compliance",
+                        agent_id="compliance-agent",
+                        action="check_policy_and_pii",
+                        reason="Verify the evidence can be shown to authorized reviewers.",
+                    ),
+                    InvestigationPlanStep(
+                        step_id="approval",
+                        agent_id="case-manager-agent",
+                        action="request_manual_review",
+                        reason="Create a human review request before closure.",
+                    ),
+                ],
+            )
+
+        if context.priority == Priority.MEDIUM:
+            return InvestigationPlan(
+                plan_id=f"plan-{context.case_id}",
+                strategy="manual_review",
+                rationale=(
+                    "Medium-risk cases need local evidence and compliance review before "
+                    "a human analyst decides closure."
+                ),
+                steps=[
+                    completed_triage,
+                    InvestigationPlanStep(
+                        step_id="evidence",
+                        agent_id="evidence-agent",
+                        action="build_evidence_timeline",
+                        reason="Collect trigger and federated evidence for manual review.",
+                    ),
+                    InvestigationPlanStep(
+                        step_id="compliance",
+                        agent_id="compliance-agent",
+                        action="check_policy_and_pii",
+                        reason="Verify the evidence can be shown to authorized reviewers.",
+                    ),
+                    InvestigationPlanStep(
+                        step_id="approval",
+                        agent_id="case-manager-agent",
+                        action="request_manual_review",
+                        reason="Create a human review request before closure.",
                     ),
                 ],
             )
@@ -392,6 +450,7 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
                 "Never execute or approve a financial hold autonomously.",
                 "High and critical risk cases require request_supervisor_approval.",
                 "Medium risk cases require request_manual_review.",
+                "Medium risk cases with shared infrastructure or velocity signals must include search_related_transactions.",
                 "Missing-data cases must request_more_data and pause_case.",
                 "Low-risk cases may only run compliance and close_case after triage.",
                 "Campaign clusters should include trace_cluster_funds after network discovery.",
@@ -527,6 +586,17 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
                     "request_supervisor_approval",
                 ],
             )
+        elif strategy == "manual_network_review":
+            actions = self._ordered_subset(
+                actions,
+                [
+                    "compute_federated_intelligence",
+                    "search_related_transactions",
+                    "build_evidence_timeline",
+                    "check_policy_and_pii",
+                    "request_manual_review",
+                ],
+            )
         elif strategy == "manual_review":
             actions = self._ordered_subset(
                 actions,
@@ -544,6 +614,7 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
 
         if context.federated_risk_signal and strategy in {
             "manual_review",
+            "manual_network_review",
             "deep_network_investigation",
             "campaign_escalation_replan",
         }:
@@ -647,6 +718,20 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
     @staticmethod
     def _requires_more_data(context: InvestigationContext) -> bool:
         return "missing_data" in context.trigger_transaction.risk_flags
+
+    @staticmethod
+    def _has_network_discovery_signal(context: InvestigationContext) -> bool:
+        return bool(
+            {
+                "shared_account",
+                "shared_counterparty",
+                "shared_device",
+                "shared_email",
+                "shared_ip",
+                "velocity",
+            }
+            & set(context.trigger_transaction.risk_flags)
+        )
 
     @staticmethod
     def _triage_was_completed(context: InvestigationContext) -> bool:
