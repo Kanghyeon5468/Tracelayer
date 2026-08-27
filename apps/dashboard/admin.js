@@ -234,7 +234,7 @@ const loadPendingApprovals = async () => {
   try {
     adminState.pendingApprovals = await apiFetch("/approvals/pending");
     if (!adminState.selectedCase && adminState.pendingApprovals.length) {
-      await selectCase(adminState.pendingApprovals[0].case_id);
+      await selectCase(adminState.pendingApprovals[0].case_id, { broadcast: false, persist: false });
     }
     renderApprovalQueue();
     updateSummary();
@@ -261,10 +261,15 @@ const refreshAdminData = async () => {
   await loadApprovalLog();
 };
 
-const selectCase = async (caseId) => {
+const selectCase = async (caseId, options = {}) => {
+  const { broadcast = true, persist = true } = options;
   adminState.selectedCase = await apiFetch(`/cases/${caseId}`);
-  localStorage.setItem("tracelayer.currentCaseId", caseId);
-  publishCaseUpdate(adminState.selectedCase, "admin.select_case");
+  if (persist) {
+    localStorage.setItem("tracelayer.currentCaseId", caseId);
+  }
+  if (broadcast) {
+    publishCaseUpdate(adminState.selectedCase, "admin.select_case");
+  }
   renderSelectedCase();
 };
 
