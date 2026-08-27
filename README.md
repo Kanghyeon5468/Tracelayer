@@ -390,7 +390,15 @@ Request more evidence with the same endpoint:
 
 ## Deployed Demo Access
 
-The Cloud Run service is private by design. Use an authenticated local proxy:
+Latest deployed service:
+
+```text
+https://tracelayer-api-2bfafiy7da-uc.a.run.app
+```
+
+The Cloud Run service is private by design. If you open that URL directly from a normal browser session, Cloud Run may return `403 Forbidden` before the TraceLayer app receives the request. That means the service is deployed, but the browser is not authenticated as a Cloud Run invoker.
+
+For a secure live demo, use an authenticated local proxy:
 
 ```bash
 gcloud run services proxy tracelayer-api \
@@ -403,6 +411,7 @@ Then open:
 
 ```text
 http://127.0.0.1:8099/dashboard
+http://127.0.0.1:8099/demo
 http://127.0.0.1:8099/admin
 ```
 
@@ -411,6 +420,28 @@ Use the demo API key when the admin console asks for it:
 ```text
 local-demo-key
 ```
+
+For API smoke tests without a browser proxy, send an identity token to Cloud Run:
+
+```bash
+TOKEN=$(gcloud auth print-identity-token)
+
+curl -H "Authorization: Bearer $TOKEN" \
+  -H "X-API-Key: local-demo-key" \
+  https://tracelayer-api-2bfafiy7da-uc.a.run.app/runtime/config
+```
+
+For a public hackathon URL, intentionally grant unauthenticated Cloud Run invoker access:
+
+```bash
+gcloud run services add-iam-policy-binding tracelayer-api \
+  --region us-central1 \
+  --project project-6ecbea1e-e0c3-4325-a63 \
+  --member allUsers \
+  --role roles/run.invoker
+```
+
+Only use the public mode for demo environments. TraceLayer's own `SECURITY_MODE=enforcing` API-key checks still run behind Cloud Run, but public invoker access exposes the service endpoint to the internet.
 
 ## Cloud Logging Queries
 
