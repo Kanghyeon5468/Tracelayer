@@ -60,6 +60,32 @@ class EvidenceAgent(BaseInvestigationAgent):
                 )
             )
 
+        if context.human_feedback:
+            events.append(
+                EvidenceEvent(
+                    timestamp=context.trigger_transaction.timestamp,
+                    event_type="human_feedback",
+                    description=f"Reviewer requested follow-up investigation: {context.human_feedback}",
+                    source="human_approval",
+                    related_transaction_id=context.trigger_transaction.transaction_id,
+                )
+            )
+
+        preserved_events = [
+            event
+            for event in context.evidence_timeline
+            if event.event_type in {"human_feedback", "missing_data_provided"}
+        ]
+        existing_keys = {
+            (event.event_type, event.description, event.source)
+            for event in events
+        }
+        for event in preserved_events:
+            event_key = (event.event_type, event.description, event.source)
+            if event_key not in existing_keys:
+                events.append(event)
+                existing_keys.add(event_key)
+
         context.evidence_timeline = sorted(events, key=lambda event: event.timestamp)
 
         output = AgentOutput(

@@ -275,7 +275,14 @@ const decideApproval = async (approval, decision) => {
     more_evidence:
       "Supervisor requested additional evidence before deciding the recommended action.",
   };
-  const reason = reasons[decision];
+  let reason = reasons[decision];
+  if (decision === "more_evidence") {
+    reason =
+      window.prompt(
+        "What should the Case Manager investigate next?",
+        "Search for more accounts using the same device.",
+      ) || reason;
+  }
 
   const updatedCase = await apiFetch(`/cases/${approval.case_id}/approval`, {
     method: "POST",

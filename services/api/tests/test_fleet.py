@@ -18,6 +18,7 @@ from app.observability.audit import AuditLedger
 from app.domain.models import (
     ActorRole,
     ApprovalDecisionRequest,
+    MissingDataRequest,
     PubSubPushEnvelope,
     RequestContext,
     RiskPolicy,
@@ -242,10 +243,44 @@ def test_case_manager_pauses_when_trigger_data_is_missing(tmp_path: Path) -> Non
         "pause_case",
     ]
     assert all(step.status == "completed" for step in case.investigation_plan.steps)
-    assert case.status == "open"
+    assert case.status == "paused"
     assert case.approval_request is None
     assert case.network_links == []
     assert case.evidence_timeline == []
+
+
+def test_missing_data_case_resumes_from_memory_after_external_event(tmp_path: Path) -> None:
+    fleet = _test_fleet(tmp_path)
+    supervisor = RequestContext(
+        actor_id="supervisor@example.com",
+        role=ActorRole.SUPERVISOR,
+        request_id="req-test-missing-data-resume",
+    )
+    paused_case = fleet.investigate("tx-9801", supervisor, create_case_run=True)
+
+    resumed_case = fleet.provide_missing_data(
+        paused_case.case_id,
+        MissingDataRequest(
+            reason=(
+                "External event supplied beneficiary account, transfer amount, "
+                "device fingerprint, and IP records."
+            )
+        ),
+        supervisor,
+    )
+
+    assert resumed_case.status == "needs_approval"
+    assert resumed_case.approval_request is not None
+    assert resumed_case.investigation_plan is not None
+    assert resumed_case.investigation_plan.strategy == "human_feedback_replan"
+    assert any(
+        output.agent_id == "external-event-adapter"
+        for output in resumed_case.agent_outputs
+    )
+    assert any(
+        event.event_type == "missing_data_provided"
+        for event in resumed_case.evidence_timeline
+    )
 
 
 def test_case_manager_generates_initial_plan_before_triage(tmp_path: Path) -> None:
@@ -618,7 +653,7 @@ def test_more_evidence_reruns_agents_and_creates_new_approval(tmp_path: Path) ->
         ApprovalDecisionRequest(
             approval_id=original_approval_id,
             decision="more_evidence",
-            reason="Need a refreshed timeline before deciding the hold.",
+            reason="Search for more accounts using the same device before deciding the hold.",
         ),
         supervisor,
     )
@@ -630,6 +665,20 @@ def test_more_evidence_reruns_agents_and_creates_new_approval(tmp_path: Path) ->
     assert updated_case.approval_request.approval_id.endswith("-r2")
     assert updated_case.approval_history[0].approval_id == original_approval_id
     assert updated_case.approval_history[0].status == "more_evidence"
+    assert updated_case.human_feedback == (
+        "Search for more accounts using the same device before deciding the hold."
+    )
+    assert updated_case.investigation_plan is not None
+    assert updated_case.investigation_plan.strategy == "human_feedback_replan"
+    assert [step.action for step in updated_case.investigation_plan.steps] == [
+        "score_transaction",
+        "compute_federated_intelligence",
+        "search_related_transactions",
+        "build_evidence_timeline",
+        "check_policy_and_pii",
+        "request_supervisor_approval",
+    ]
+    assert sum(output.agent_id == "network-agent" for output in updated_case.agent_outputs) >= 2
     assert sum(output.agent_id == "evidence-agent" for output in updated_case.agent_outputs) == 2
     assert sum(output.agent_id == "compliance-agent" for output in updated_case.agent_outputs) == 2
     assert any(event.event_type == "human_feedback" for event in updated_case.evidence_timeline)

@@ -77,6 +77,29 @@ const networkOutput = (caseData) =>
     (output) => output.agent_id === "network-agent" && output.data?.network_graph,
   );
 
+const renderDemoProcess = (caseData) => {
+  const scenario = scenarioBuilderOutput(caseData);
+  const parsed = scenario?.data?.parsed_signals || {};
+  const plan = caseData.investigation_plan;
+  document.querySelector("#demo-process").innerHTML = `
+    <div class="process-step completed">
+      <span>1</span>
+      <strong>Human Scenario</strong>
+      <p>${escapeHtml((scenario?.data?.prompt_excerpt || "").slice(0, 120))}</p>
+    </div>
+    <div class="process-step completed">
+      <span>2</span>
+      <strong>Gemini Normalization</strong>
+      <p>${escapeHtml(parsed.currency || "USD")} ${Number(parsed.amount || 0).toLocaleString()} · ${escapeHtml(parsed.country || "US")} · ${escapeHtml(parsed.channel || "wire")}</p>
+    </div>
+    <div class="process-step completed">
+      <span>3</span>
+      <strong>TraceLayer Investigation</strong>
+      <p>${titleCase(plan?.strategy || "planned")} · ${caseData.agent_outputs?.length || 0} agent outputs</p>
+    </div>
+  `;
+};
+
 const nodeTone = (type) => {
   if (type === "trigger_transaction") {
     return "trigger";
@@ -109,6 +132,10 @@ const renderGeneratedCase = (caseData) => {
       <div><span>Risk</span><strong>${escapeHtml(caseData.risk_score)}</strong></div>
       <div><span>Priority</span><strong>${titleCase(caseData.priority)}</strong></div>
     </div>
+    <div class="item">
+      <strong>Structured Synthetic Transaction</strong>
+      <p>Gemini converts the human-written story into isolated demo records before TraceLayer agents investigate it.</p>
+    </div>
     <div class="metric-grid">
       <div class="metric"><span>Amount</span><strong>${escapeHtml(parsed.currency || "USD")} ${Number(parsed.amount || 0).toLocaleString()}</strong></div>
       <div class="metric"><span>Destination</span><strong>${escapeHtml(parsed.country || "US")}</strong></div>
@@ -122,9 +149,11 @@ const renderGeneratedCase = (caseData) => {
         ? `<div class="federated-section demo-federated">
             <h3>Federated Intelligence</h3>
             <div class="privacy-list">
-              <div><strong>${escapeHtml(federated.federated_risk_score)}%</strong><p>Federated risk score</p></div>
-              <div><strong>${escapeHtml(federated.participating_nodes?.length || 0)}</strong><p>Contributing organizations</p></div>
+              <div><strong>${escapeHtml(federated.federated_risk_score)}%</strong><p>Federated risk</p></div>
+              <div><strong>${federated.federated_risk_score >= 80 ? "High" : "Medium"}</strong><p>Pattern match</p></div>
+              <div><strong>${escapeHtml(federated.participating_nodes?.length || 0)}</strong><p>Contributing institutions</p></div>
               <div><strong>0</strong><p>External customer records exposed</p></div>
+              <div><strong>Secure Aggregation + DP</strong><p>Privacy protection</p></div>
             </div>
           </div>`
         : ""
@@ -868,6 +897,7 @@ const publishCaseUpdate = (caseData) => {
 
 const renderCase = (caseData) => {
   renderGeneratedCase(caseData);
+  renderDemoProcess(caseData);
   renderScenarioNetworkGraph(caseData);
   renderPlan(caseData);
   renderApproval(caseData);

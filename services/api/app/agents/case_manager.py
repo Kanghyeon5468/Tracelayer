@@ -60,6 +60,10 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             "check_policy_and_pii",
             "request_supervisor_approval",
         },
+        "human_feedback_replan": {
+            "build_evidence_timeline",
+            "check_policy_and_pii",
+        },
     }
 
     def __init__(
@@ -169,6 +173,9 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             reason="Triage must score and classify every flagged transaction.",
             status=PlanStepStatus.COMPLETED,
         )
+
+        if context.human_feedback:
+            return self._build_human_feedback_plan(context, completed_triage)
 
         if self._requires_more_data(context):
             return InvestigationPlan(
@@ -406,6 +413,92 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             ],
         )
 
+    def _build_human_feedback_plan(
+        self,
+        context: InvestigationContext,
+        completed_triage: InvestigationPlanStep,
+    ) -> InvestigationPlan:
+        feedback = context.human_feedback or "Reviewer requested additional case review."
+        feedback_lower = feedback.lower()
+        needs_network = any(
+            token in feedback_lower
+            for token in (
+                "account",
+                "device",
+                "ip",
+                "email",
+                "counterparty",
+                "network",
+                "linked",
+                "same",
+                "shared",
+                "cluster",
+                "graph",
+            )
+        )
+        approval_action = (
+            "request_supervisor_approval"
+            if context.priority in {Priority.HIGH, Priority.CRITICAL}
+            else "request_manual_review"
+        )
+        approval_reason = (
+            "Create a fresh supervisor approval after the feedback-directed investigation."
+            if approval_action == "request_supervisor_approval"
+            else "Create a fresh analyst review after the feedback-directed investigation."
+        )
+        steps = [completed_triage]
+        if context.federated_risk_signal:
+            steps.append(
+                InvestigationPlanStep(
+                    step_id="federated-intelligence",
+                    agent_id="triage-agent",
+                    action="compute_federated_intelligence",
+                    reason="Keep the existing privacy-preserving federated signal in the resumed plan.",
+                    status=PlanStepStatus.COMPLETED,
+                )
+            )
+        if needs_network:
+            steps.append(
+                InvestigationPlanStep(
+                    step_id="network-feedback",
+                    agent_id="network-agent",
+                    action="search_related_transactions",
+                    reason=f"Reviewer feedback asks for network discovery: {feedback}",
+                )
+            )
+        steps.extend(
+            [
+                InvestigationPlanStep(
+                    step_id="evidence-feedback",
+                    agent_id="evidence-agent",
+                    action="build_evidence_timeline",
+                    reason=f"Refresh the evidence timeline after reviewer feedback: {feedback}",
+                ),
+                InvestigationPlanStep(
+                    step_id="compliance-feedback",
+                    agent_id="compliance-agent",
+                    action="check_policy_and_pii",
+                    reason="Recheck PII and policy boundaries before creating a new approval.",
+                ),
+                InvestigationPlanStep(
+                    step_id="approval-feedback",
+                    agent_id="case-manager-agent",
+                    action=approval_action,
+                    reason=approval_reason,
+                ),
+            ]
+        )
+        return InvestigationPlan(
+            plan_id=f"plan-{context.case_id}-human-feedback-r{len(context.approval_history) + 1}",
+            strategy="human_feedback_replan",
+            rationale=(
+                "A human reviewer requested more evidence, so the Case Manager asks "
+                "Gemini to choose a feedback-directed follow-up plan before issuing "
+                "a new approval request."
+            ),
+            steps=steps,
+        )
+
     def _request_gemini_plan_proposal(
         self,
         context: InvestigationContext,
@@ -437,6 +530,7 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             "related_transaction_count": len(context.related_transactions),
             "network_link_count": len(context.network_links),
             "campaign_detection": self._latest_campaign_detection(context),
+            "human_feedback": context.human_feedback,
             "federated_signal_available": context.federated_risk_signal is not None,
             "federated_risk_score": (
                 context.federated_risk_signal.federated_risk_score
@@ -454,6 +548,7 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
                 "Missing-data cases must request_more_data and pause_case.",
                 "Low-risk cases may only run compliance and close_case after triage.",
                 "Campaign clusters should include trace_cluster_funds after network discovery.",
+                "Human feedback cases must route through the planner; if feedback asks for accounts, devices, IPs, emails, clusters, or graph discovery, run search_related_transactions before evidence.",
             ],
             "baseline_policy_plan": self._plan_to_proposal(baseline_plan),
         }
@@ -501,6 +596,12 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             return None
 
         required_actions = self.REQUIRED_ACTIONS_BY_STRATEGY.get(expected_strategy, set())
+        if expected_strategy == "human_feedback_replan":
+            required_actions = {
+                step.action
+                for step in baseline_plan.steps
+                if step.status == PlanStepStatus.PLANNED
+            }
         missing_actions = sorted(required_actions - set(proposed_actions))
         if missing_actions:
             proposal_result["validation_error"] = (
@@ -611,6 +712,19 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             actions = self._ordered_subset(actions, ["check_policy_and_pii", "close_case"])
         elif strategy == "pause_for_more_data":
             actions = self._ordered_subset(actions, ["request_more_data", "pause_case"])
+        elif strategy == "human_feedback_replan":
+            actions = self._ordered_subset(
+                actions,
+                [
+                    "compute_federated_intelligence",
+                    "search_related_transactions",
+                    "trace_cluster_funds",
+                    "build_evidence_timeline",
+                    "check_policy_and_pii",
+                    "request_manual_review",
+                    "request_supervisor_approval",
+                ],
+            )
 
         if context.federated_risk_signal and strategy in {
             "manual_review",
@@ -656,7 +770,11 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
             status = PlanStepStatus.PLANNED
             if action in {"score_transaction", "compute_federated_intelligence"}:
                 status = PlanStepStatus.COMPLETED
-            if action == "search_related_transactions" and context.related_transactions:
+            if (
+                action == "search_related_transactions"
+                and context.related_transactions
+                and strategy != "human_feedback_replan"
+            ):
                 status = PlanStepStatus.COMPLETED
 
             steps.append(
@@ -698,6 +816,8 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
     def _plan_id_for_strategy(context: InvestigationContext, strategy: str) -> str:
         if strategy == "campaign_escalation_replan":
             return f"plan-{context.case_id}-campaign-escalation"
+        if strategy == "human_feedback_replan":
+            return f"plan-{context.case_id}-human-feedback-r{len(context.approval_history) + 1}"
         return f"plan-{context.case_id}"
 
     @staticmethod
@@ -735,6 +855,8 @@ class CaseManagerPlanningAgent(BaseInvestigationAgent):
 
     @staticmethod
     def _triage_was_completed(context: InvestigationContext) -> bool:
+        if context.force_retriage:
+            return False
         return any(output.agent_id == "triage-agent" for output in context.agent_outputs)
 
     @staticmethod
@@ -804,7 +926,7 @@ class CaseManagerAgent(BaseInvestigationAgent):
             context.investigation_plan
             and context.investigation_plan.strategy == "pause_for_more_data"
         ):
-            context.status = CaseStatus.OPEN
+            context.status = CaseStatus.PAUSED
             context.approval_request = None
             summary = "Case paused for more data before continuing investigation."
         else:

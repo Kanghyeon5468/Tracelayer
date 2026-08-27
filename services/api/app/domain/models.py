@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 
 class CaseStatus(StrEnum):
     OPEN = "open"
+    PAUSED = "paused"
     NEEDS_APPROVAL = "needs_approval"
     CLOSED = "closed"
 
@@ -170,6 +171,16 @@ class ApprovalDecisionRequest(BaseModel):
     reason: str
 
 
+class MissingDataRequest(BaseModel):
+    reason: str = Field(
+        default=(
+            "External system supplied missing beneficiary, amount, device, and IP records."
+        ),
+        min_length=8,
+        max_length=500,
+    )
+
+
 class PubSubPushMessage(BaseModel):
     data: str
     message_id: str | None = Field(default=None, alias="messageId")
@@ -300,6 +311,8 @@ class InvestigationContext(BaseModel):
     status: CaseStatus = CaseStatus.OPEN
     memory_snapshot_id: str | None = None
     audit_chain_tip: str | None = None
+    human_feedback: str | None = None
+    force_retriage: bool = False
 
 
 class InvestigationRequest(BaseModel):
@@ -330,5 +343,6 @@ class InvestigationCase(BaseModel):
     federated_risk_signal: FederatedRiskSignal | None = None
     memory_snapshot_id: str | None = None
     audit_chain_tip: str | None = None
+    human_feedback: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

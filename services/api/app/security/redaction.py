@@ -56,6 +56,11 @@ def redact_case_for_role(case: InvestigationCase, role: ActorRole) -> Investigat
                 for approval in case.approval_history
                 if (redacted := _redact_approval(approval, guardrail)) is not None
             ],
+            "human_feedback": (
+                guardrail.redact_sensitive_text(case.human_feedback)
+                if case.human_feedback
+                else None
+            ),
         }
     )
 

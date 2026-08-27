@@ -20,6 +20,7 @@ from app.domain.models import (
     InvestigationCase,
     InvestigationJob,
     InvestigationRequest,
+    MissingDataRequest,
     PendingApprovalSummary,
     PubSubPushEnvelope,
     RequestContext,
@@ -257,6 +258,22 @@ def decide_approval(
 ) -> InvestigationCase:
     case = _run_or_raise(
         lambda: FraudInvestigationFleet(settings).decide_approval(case_id, decision, request)
+    )
+    return redact_case_for_role(case, request.role)
+
+
+@app.post("/cases/{case_id}/missing-data", response_model=InvestigationCase)
+def provide_missing_data(
+    case_id: str,
+    missing_data: MissingDataRequest,
+    request: RequestContext = Depends(get_request_context),
+) -> InvestigationCase:
+    case = _run_or_raise(
+        lambda: FraudInvestigationFleet(settings).provide_missing_data(
+            case_id,
+            missing_data,
+            request,
+        )
     )
     return redact_case_for_role(case, request.role)
 

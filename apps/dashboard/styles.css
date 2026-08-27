@@ -886,6 +886,21 @@ label {
   padding-top: 14px;
 }
 
+.advanced-details {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.advanced-details summary {
+  cursor: pointer;
+  color: var(--soft);
+  font-weight: 800;
+}
+
+.advanced-details .privacy-list {
+  margin-top: 12px;
+}
+
 .armor-callout {
   display: grid;
   gap: 4px;
@@ -1522,6 +1537,30 @@ label {
 
 .registry-grid {
   display: grid;
+  gap: 12px;
+}
+
+.registry-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.registry-toolbar input {
+  width: min(320px, 100%);
+}
+
+.registry-toolbar span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.registry-list {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
@@ -1549,6 +1588,42 @@ label {
 
 .registry-card code {
   color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.registry-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.registry-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.registry-meta div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px;
+  background: rgba(2, 8, 14, 0.22);
+}
+
+.registry-meta dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.registry-meta dd {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 850;
   overflow-wrap: anywhere;
 }
 
@@ -1758,6 +1833,56 @@ label {
   margin-bottom: 16px;
 }
 
+.demo-process-panel {
+  margin-bottom: 16px;
+}
+
+.demo-process {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.process-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: start;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(2, 8, 14, 0.26);
+  padding: 12px;
+}
+
+.process-step span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(47, 147, 255, 0.18);
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.process-step strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.process-step p {
+  grid-column: 2;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.process-step.completed {
+  border-color: rgba(25, 198, 178, 0.34);
+}
+
 .demo-prompt-panel {
   display: grid;
   gap: 12px;
@@ -1882,6 +2007,9 @@ label {
   .network-graph-stage,
   .case-summary-list,
   .demo-case-strip,
+  .demo-process,
+  .registry-list,
+  .registry-meta,
   .approval-row,
   .log-row {
     grid-template-columns: 1fr;

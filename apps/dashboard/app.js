@@ -181,6 +181,7 @@ const liveChannel = "BroadcastChannel" in window ? new BroadcastChannel("tracela
 let threeModulePromise = null;
 let networkGraph3dState = null;
 let networkGraphRenderToken = 0;
+let registryAgents = [];
 
 const titleCase = (value) =>
   String(value)
@@ -1018,15 +1019,48 @@ const renderInvestigationProgress = (plan) => {
 };
 
 const renderAgentRegistry = (agents) => {
-  document.querySelector("#agent-registry").innerHTML = agents
+  registryAgents = agents;
+  const query = (document.querySelector("#agent-registry-search")?.value || "").trim().toLowerCase();
+  const enriched = agents.map(enrichAgentIdentity);
+  const visibleAgents = query
+    ? enriched.filter((agent) =>
+        [
+          agent.display_name,
+          agent.agent_id,
+          agent.owner,
+          agent.status,
+          agent.tool,
+          ...agent.permissions,
+          ...agent.data_access,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query),
+      )
+    : enriched;
+  document.querySelector("#agent-registry").innerHTML = `
+    <div class="registry-toolbar">
+      <input id="agent-registry-search" type="search" placeholder="Search agents" value="${escapeHtml(query)}" />
+      <span>${visibleAgents.length}/${agents.length} approved agents</span>
+    </div>
+    <div class="registry-list">
+      ${
+        visibleAgents
     .map(
       (agent) => `
         <article class="registry-card">
           <header>
             <h3>${agent.display_name}</h3>
-            <span class="chip">${agent.version}</span>
+            <span class="chip">${agent.status}</span>
           </header>
+          <dl class="registry-meta">
+            <div><dt>Version</dt><dd>${agent.version}</dd></div>
+            <div><dt>Owner</dt><dd>${agent.owner}</dd></div>
+            <div><dt>Health</dt><dd>${agent.health}</dd></div>
+            <div><dt>Updated</dt><dd>${agent.updated}</dd></div>
+          </dl>
           <code>${agent.service_account}</code>
+          <p>${agent.tool}</p>
           <div class="chip-row">
             ${agent.permissions.map((permission) => `<span class="chip">${permission}</span>`).join("")}
           </div>
@@ -1036,7 +1070,51 @@ const renderAgentRegistry = (agents) => {
         </article>
       `,
     )
-    .join("");
+    .join("") || '<div class="item"><strong>No matching agents</strong><p>Try network, fraud, compliance, approval, or evidence.</p></div>'
+      }
+    </div>
+  `;
+};
+
+const enrichAgentIdentity = (agent) => {
+  const meta = {
+    "triage-agent": {
+      owner: "Fraud Risk",
+      status: "Approved",
+      health: "Healthy",
+      updated: "Aug 27",
+      tool: "Tool: Vertex AI Gemini risk explanation and Veritas federated scoring",
+    },
+    "network-agent": {
+      owner: "Fraud Intelligence",
+      status: "Approved",
+      health: "Healthy",
+      updated: "Aug 27",
+      tool: "Tool: BigQuery network search and campaign graph discovery",
+    },
+    "evidence-agent": {
+      owner: "Investigations",
+      status: "Approved",
+      health: "Healthy",
+      updated: "Aug 27",
+      tool: "Tool: evidence timeline writer with policy references",
+    },
+    "compliance-agent": {
+      owner: "Compliance",
+      status: "Approved",
+      health: "Healthy",
+      updated: "Aug 27",
+      tool: "Tool: PII, Model Armor, and enforcement policy checks",
+    },
+    "case-manager-agent": {
+      owner: "Case Operations",
+      status: "Approved",
+      health: "Healthy",
+      updated: "Aug 27",
+      tool: "Tool: Gemini planner, ADK runner session, approval routing, and resume state",
+    },
+  };
+  return { ...agent, ...(meta[agent.agent_id] || meta["case-manager-agent"]) };
 };
 
 const activateDashboardTab = (tabName) => {
@@ -1168,35 +1246,39 @@ const renderCase = (caseData) => {
         <h3>Federated Intelligence</h3>
         <div class="metric-grid">
           <div class="metric">
-            <span>Risk Score</span>
+            <span>Federated Risk</span>
             <strong>${signal.federated_risk_score}%</strong>
+          </div>
+          <div class="metric">
+            <span>Pattern Match</span>
+            <strong>${signal.federated_risk_score >= 80 ? "High" : "Medium"}</strong>
+          </div>
+          <div class="metric">
+            <span>Contributing Institutions</span>
+            <strong>${signal.participating_nodes.length}</strong>
           </div>
           <div class="metric">
             <span>Pattern</span>
             <strong>${topPattern}</strong>
-          </div>
-          <div class="metric">
-            <span>Confidence</span>
-            <strong>${signal.federated_risk_score >= 80 ? "High" : "Medium"}</strong>
-          </div>
-          <div class="metric">
-            <span>Contributing Orgs</span>
-            <strong>${signal.participating_nodes.length}</strong>
           </div>
           <div class="metric privacy-metric">
             <span>External Customer Records Exposed</span>
             <strong>0</strong>
           </div>
           <div class="metric">
-            <span>DP Epsilon</span>
-            <strong>${signal.differential_privacy.epsilon}</strong>
+            <span>Privacy Protection</span>
+            <strong>Secure Aggregation + DP</strong>
           </div>
         </div>
-        <div class="privacy-list">
-          <div><strong>Secure Aggregation</strong><p>${titleCase(signal.secure_aggregation.server_observes)}</p></div>
-          <div><strong>Provenance</strong><p>${signal.provenance_hash.slice(0, 16)}...</p></div>
-          <div><strong>Campaign</strong><p>${signal.campaign_signature}</p></div>
-        </div>
+        <details class="advanced-details">
+          <summary>Advanced Details</summary>
+          <div class="privacy-list">
+            <div><strong>Secure Aggregation</strong><p>${titleCase(signal.secure_aggregation.server_observes)}</p></div>
+            <div><strong>DP Epsilon</strong><p>${signal.differential_privacy.epsilon}</p></div>
+            <div><strong>Provenance</strong><p>${signal.provenance_hash.slice(0, 16)}...</p></div>
+            <div><strong>Campaign</strong><p>${signal.campaign_signature}</p></div>
+          </div>
+        </details>
       </div>
       <div class="federated-section local-evidence">
         <h3>Local Investigation Evidence</h3>
@@ -1245,7 +1327,13 @@ const renderCase = (caseData) => {
           : ""
       }
     `
-    : "<p>No approval request has been created.</p>";
+    : caseData.status === "paused"
+      ? `
+        <strong>Paused</strong>
+        <p>This long-running investigation is stored in memory while it waits for missing source data.</p>
+        <button class="secondary-action" type="button" data-provide-missing-data="${escapeHtml(caseData.case_id)}">Provide Missing Data</button>
+      `
+      : "<p>No approval request has been created.</p>";
   document.querySelector("#audit-summary").innerHTML = `
     <div class="item">
       <strong>Audit Chain</strong>
@@ -1330,6 +1418,34 @@ const runAttackDemo = async () => {
   } finally {
     button.disabled = false;
     button.textContent = "Run Attack Demo";
+  }
+};
+
+const runMissingDataDemo = async () => {
+  const button = document.querySelector("#run-missing-data-demo");
+  button.disabled = true;
+  button.textContent = "Pausing...";
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/cases/investigate`, {
+      method: "POST",
+      headers: {
+        ...apiHeaders(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ transaction_id: "tx-9801" }),
+    });
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    const caseData = await response.json();
+    renderCase(caseData);
+    publishCaseUpdate(caseData, "dashboard.paused_demo");
+  } catch (error) {
+    renderCase(fallbackCase);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Run Paused Demo";
   }
 };
 
@@ -1433,6 +1549,43 @@ const loadAgentRegistry = async () => {
   }
 };
 
+const provideMissingData = async (caseId) => {
+  const button = document.querySelector("[data-provide-missing-data]");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Resuming...";
+  }
+  try {
+    const response = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/missing-data`, {
+      method: "POST",
+      headers: { ...apiHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        reason:
+          "External event supplied beneficiary account, amount, device fingerprint, and IP records for the paused case.",
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    const caseData = await response.json();
+    renderCase(caseData);
+    publishCaseUpdate(caseData, "dashboard.provide_missing_data");
+  } catch (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Provide Missing Data";
+    }
+  }
+};
+
+const handleProvideMissingDataClick = (event) => {
+  const button = event.target.closest("[data-provide-missing-data]");
+  if (!button) {
+    return;
+  }
+  provideMissingData(button.dataset.provideMissingData);
+};
+
 const loadCurrentCase = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/cases/${currentCaseId}`, {
@@ -1470,8 +1623,15 @@ window.addEventListener("storage", (event) => {
 document.querySelector("#run-demo").addEventListener("click", runDemo);
 document.querySelector("#run-attack-demo").addEventListener("click", runAttackDemo);
 document.querySelector("#run-async-demo").addEventListener("click", runAsyncDemo);
+document.querySelector("#run-missing-data-demo").addEventListener("click", runMissingDataDemo);
 document.addEventListener("click", handleFraudMapControlClick);
 document.addEventListener("click", handleDashboardTabClick);
+document.addEventListener("click", handleProvideMissingDataClick);
+document.addEventListener("input", (event) => {
+  if (event.target?.id === "agent-registry-search") {
+    renderAgentRegistry(registryAgents);
+  }
+});
 renderCase(fallbackCase);
 loadRuntimeConfig();
 loadAgentRegistry();

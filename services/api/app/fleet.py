@@ -28,10 +28,12 @@ from app.domain.models import (
     ApprovalLogEntry,
     CaseStatus,
     EvidenceEvent,
+    AgentOutput,
     InvestigationCase,
     InvestigationContext,
     InvestigationJob,
     InvestigationJobStatus,
+    MissingDataRequest,
     PendingApprovalSummary,
     PlanStepStatus,
     PubSubPushEnvelope,
@@ -133,45 +135,7 @@ class FraudInvestigationFleet:
             customer=customer,
         )
 
-        policy_text = self.repository.read_policy_text()
-        risk_policy = self.risk_policy_store.load_policy()
-        network_search = BigQueryNetworkSearch(self.settings, self.repository)
-        planned_action_handlers = {
-            "score_transaction": TriageAgent(
-                self.registry.get("triage-agent"),
-                self.reasoner,
-                self.federated_engine,
-                risk_policy,
-                self.adk_runtime,
-            ),
-            "search_related_transactions": NetworkAgent(
-                self.registry.get("network-agent"),
-                network_search,
-                self.adk_runtime,
-            ),
-            "build_evidence_timeline": EvidenceAgent(
-                self.registry.get("evidence-agent"),
-                policy_text,
-            ),
-            "check_policy_and_pii": ComplianceAgent(self.registry.get("compliance-agent")),
-            "trace_cluster_funds": CampaignTraceAgent(
-                self.registry.get("network-agent"),
-                self.adk_runtime,
-            ),
-        }
-        case_manager_agent = CaseManagerAgent(
-            self.registry.get("case-manager-agent"),
-            self.adk_runtime,
-        )
-        planned_action_handlers.update(
-            {
-                "request_manual_review": case_manager_agent,
-                "request_supervisor_approval": case_manager_agent,
-                "request_more_data": case_manager_agent,
-                "pause_case": case_manager_agent,
-                "close_case": case_manager_agent,
-            }
-        )
+        planned_action_handlers = self._planned_action_handlers()
         planning_agent = CaseManagerPlanningAgent(
             self.registry.get("case-manager-agent"),
             self.adk_runtime,
@@ -259,6 +223,43 @@ class FraudInvestigationFleet:
         )
         return case
 
+    def _planned_action_handlers(self) -> dict[str, object]:
+        policy_text = self.repository.read_policy_text()
+        risk_policy = self.risk_policy_store.load_policy()
+        network_search = BigQueryNetworkSearch(self.settings, self.repository)
+        case_manager_agent = CaseManagerAgent(
+            self.registry.get("case-manager-agent"),
+            self.adk_runtime,
+        )
+        return {
+            "score_transaction": TriageAgent(
+                self.registry.get("triage-agent"),
+                self.reasoner,
+                self.federated_engine,
+                risk_policy,
+                self.adk_runtime,
+            ),
+            "search_related_transactions": NetworkAgent(
+                self.registry.get("network-agent"),
+                network_search,
+                self.adk_runtime,
+            ),
+            "build_evidence_timeline": EvidenceAgent(
+                self.registry.get("evidence-agent"),
+                policy_text,
+            ),
+            "check_policy_and_pii": ComplianceAgent(self.registry.get("compliance-agent")),
+            "trace_cluster_funds": CampaignTraceAgent(
+                self.registry.get("network-agent"),
+                self.adk_runtime,
+            ),
+            "request_manual_review": case_manager_agent,
+            "request_supervisor_approval": case_manager_agent,
+            "request_more_data": case_manager_agent,
+            "pause_case": case_manager_agent,
+            "close_case": case_manager_agent,
+        }
+
     def _execute_investigation_plan(
         self,
         planned_action_handlers: dict[str, object],
@@ -287,6 +288,7 @@ class FraudInvestigationFleet:
                     planning_agent
                     and allowed_actions is None
                     and step.action == "search_related_transactions"
+                    and context.investigation_plan.strategy != "human_feedback_replan"
                     and self._should_replan_after_network(context)
                 ):
                     self.trace_logger.emit(
@@ -757,38 +759,23 @@ class FraudInvestigationFleet:
                     "approval_request": superseded_approval,
                     "approval_history": [*case.approval_history, superseded_approval],
                     "status": CaseStatus.OPEN,
+                    "human_feedback": decision_request.reason,
                 }
             )
         )
+        context.human_feedback = decision_request.reason
 
-        policy_text = self.repository.read_policy_text()
-        self.gateway.run_agent(
-            EvidenceAgent(self.registry.get("evidence-agent"), policy_text),
+        planning_agent = CaseManagerPlanningAgent(
+            self.registry.get("case-manager-agent"),
+            self.adk_runtime,
+            self.reasoner,
+        )
+        self.gateway.run_agent(planning_agent, context, request)
+        self._execute_investigation_plan(
+            self._planned_action_handlers(),
             context,
             request,
-        )
-        context.evidence_timeline.append(
-            EvidenceEvent(
-                timestamp=datetime.now(UTC),
-                event_type="human_feedback",
-                description=f"Reviewer requested more evidence: {decision_request.reason}",
-                source="human_approval",
-                related_transaction_id=context.trigger_transaction.transaction_id,
-            )
-        )
-        context.evidence_timeline = sorted(
-            context.evidence_timeline,
-            key=lambda event: event.timestamp,
-        )
-        self.gateway.run_agent(
-            ComplianceAgent(self.registry.get("compliance-agent")),
-            context,
-            request,
-        )
-        self.gateway.run_agent(
-            CaseManagerAgent(self.registry.get("case-manager-agent"), self.adk_runtime),
-            context,
-            request,
+            planning_agent=planning_agent,
         )
 
         updated_case = self._case_from_context(context, case.created_at)
@@ -800,10 +787,16 @@ class FraudInvestigationFleet:
             action="approvals.request_more_evidence",
             resource=decision_request.approval_id,
             decision="allow",
-            reason="Human feedback reran Evidence, Compliance, and Case Manager agents.",
+            reason="Human feedback was routed through the Gemini planner before agents reran.",
             case_id=case.case_id,
             metadata={
                 "memory_snapshot_id": memory_snapshot_id,
+                "human_feedback": decision_request.reason,
+                "feedback_plan_strategy": (
+                    updated_case.investigation_plan.strategy
+                    if updated_case.investigation_plan
+                    else None
+                ),
                 "new_approval_id": (
                     updated_case.approval_request.approval_id
                     if updated_case.approval_request
@@ -819,16 +812,151 @@ class FraudInvestigationFleet:
         )
         self.report_writer.write_markdown(updated_case)
         self.trace_logger.emit(
-            message="Human feedback requested more evidence and agents reran.",
+            message="Human feedback replanned investigation and agents reran.",
             request=request,
             case_id=case.case_id,
-            tool="FraudInvestigationFleet.request_more_evidence",
+            tool="FraudInvestigationFleet.human_feedback_replan",
             status="more_evidence",
             metadata={
                 "superseded_approval_id": decision_request.approval_id,
+                "human_feedback": decision_request.reason,
+                "feedback_plan_strategy": (
+                    updated_case.investigation_plan.strategy
+                    if updated_case.investigation_plan
+                    else None
+                ),
                 "new_approval_id": (
                     updated_case.approval_request.approval_id
                     if updated_case.approval_request
+                    else None
+                ),
+            },
+        )
+        return updated_case
+
+    def provide_missing_data(
+        self,
+        case_id: str,
+        missing_data: MissingDataRequest,
+        request: RequestContext | None = None,
+    ) -> InvestigationCase:
+        request = request or build_service_context()
+        actor_decision = self.policy_engine.actor_can(request, "cases.investigate")
+        self.audit_ledger.record(
+            request=request,
+            action="cases.provide_missing_data",
+            resource=case_id,
+            decision="allow" if actor_decision.allowed else "deny",
+            reason=actor_decision.reason,
+            case_id=case_id,
+        )
+        if not actor_decision.allowed:
+            raise PermissionError(actor_decision.reason)
+
+        case = self.memory_bank.load_case(case_id)
+        if not case:
+            raise KeyError(f"Case not found: {case_id}")
+        if case.status != CaseStatus.PAUSED and (
+            not case.investigation_plan
+            or case.investigation_plan.strategy != "pause_for_more_data"
+        ):
+            raise ValueError(f"Case is not waiting for missing data: {case_id}")
+
+        context = self._context_from_case(case)
+        context.status = CaseStatus.OPEN
+        context.approval_request = None
+        context.human_feedback = missing_data.reason
+        context.force_retriage = True
+        context.trigger_transaction = self._fill_missing_transaction(
+            context.trigger_transaction,
+            context.customer.emails[0] if context.customer.emails else context.trigger_transaction.email,
+        )
+        context.evidence_timeline.append(
+            EvidenceEvent(
+                timestamp=datetime.now(UTC),
+                event_type="missing_data_provided",
+                description=missing_data.reason,
+                source="external_event",
+                related_transaction_id=context.trigger_transaction.transaction_id,
+            )
+        )
+        context.agent_outputs.append(
+            AgentOutput(
+                agent_id="external-event-adapter",
+                summary=(
+                    "Loaded paused case from memory and supplied missing transaction "
+                    "fields before resuming the planner."
+                ),
+                confidence=1.0,
+                data={
+                    "event": "missing_data_provided",
+                    "reason": missing_data.reason,
+                    "resumed_from_status": case.status,
+                },
+            )
+        )
+
+        planning_agent = CaseManagerPlanningAgent(
+            self.registry.get("case-manager-agent"),
+            self.adk_runtime,
+            self.reasoner,
+        )
+        self.gateway.run_agent(planning_agent, context, request)
+        self._execute_investigation_plan(
+            self._planned_action_handlers(),
+            context,
+            request,
+            allowed_actions={"score_transaction"},
+            planning_agent=planning_agent,
+        )
+        context.force_retriage = False
+        self.gateway.run_agent(planning_agent, context, request)
+        self._execute_investigation_plan(
+            self._planned_action_handlers(),
+            context,
+            request,
+            planning_agent=planning_agent,
+        )
+
+        updated_case = self._case_from_context(context, case.created_at)
+        report_path = self.report_writer.path_for(updated_case.case_id)
+        updated_case = updated_case.model_copy(update={"report_path": str(report_path)})
+        memory_snapshot_id = self.memory_bank.save_case(updated_case)
+        event = self.audit_ledger.record(
+            request=request,
+            action="cases.persist_missing_data_resume",
+            resource=case_id,
+            decision="allow",
+            reason="Paused case resumed from persisted memory after missing data arrived.",
+            case_id=case_id,
+            metadata={
+                "memory_snapshot_id": memory_snapshot_id,
+                "human_feedback": missing_data.reason,
+                "resumed_plan_strategy": (
+                    updated_case.investigation_plan.strategy
+                    if updated_case.investigation_plan
+                    else None
+                ),
+            },
+        )
+        updated_case = updated_case.model_copy(
+            update={
+                "memory_snapshot_id": memory_snapshot_id,
+                "audit_chain_tip": event.event_hash,
+            }
+        )
+        self.report_writer.write_markdown(updated_case)
+        self.trace_logger.emit(
+            message="Paused investigation resumed after missing data arrived.",
+            request=request,
+            case_id=case_id,
+            tool="FraudInvestigationFleet.provide_missing_data",
+            status="succeeded",
+            metadata={
+                "human_feedback": missing_data.reason,
+                "resumed_plan_strategy": (
+                    updated_case.investigation_plan.strategy
+                    if updated_case.investigation_plan
                     else None
                 ),
             },
@@ -902,6 +1030,7 @@ class FraudInvestigationFleet:
             status=case.status,
             memory_snapshot_id=case.memory_snapshot_id,
             audit_chain_tip=case.audit_chain_tip,
+            human_feedback=case.human_feedback,
         )
 
     def _case_from_context(
@@ -927,8 +1056,29 @@ class FraudInvestigationFleet:
             federated_risk_signal=context.federated_risk_signal,
             memory_snapshot_id=context.memory_snapshot_id,
             audit_chain_tip=context.audit_chain_tip,
+            human_feedback=context.human_feedback,
             created_at=created_at,
             updated_at=datetime.now(UTC),
+        )
+
+    @staticmethod
+    def _fill_missing_transaction(transaction: Transaction, email: str) -> Transaction:
+        risk_flags = sorted(
+            (set(transaction.risk_flags) - {"missing_data"})
+            | {"new_country", "shared_device", "shared_ip", "unusual_hour"}
+        )
+        return transaction.model_copy(
+            update={
+                "amount": 12_400.0,
+                "country": "SG",
+                "channel": "wire",
+                "device_id": "dev-a19",
+                "ip_address": "203.0.113.74",
+                "email": email,
+                "counterparty_account_id": "acct-foreign-441",
+                "risk_flags": risk_flags,
+                "status": "flagged",
+            }
         )
 
     def _related_transactions_from_case(
