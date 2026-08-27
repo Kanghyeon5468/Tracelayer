@@ -19,7 +19,7 @@ gcloud agent-registry services create tracelayer-triage-agent \
   --location=$REGION \
   --display-name="TraceLayer Triage Agent" \
   --agent-spec-type=a2a-agent-card \
-  --agent-spec-content=@/tmp/tracelayer-triage-agent-card.json
+  --agent-spec-content=/tmp/tracelayer-triage-agent-card.json
 
 gcloud agent-registry agents list \
   --project=$PROJECT_ID \
@@ -43,15 +43,22 @@ gcloud iam service-accounts create tracelayer-compliance-agent \
   --project=$PROJECT_ID \
   --display-name="TraceLayer Compliance Agent Identity"
 
-bq add-iam-policy-binding \
-  --member=serviceAccount:tracelayer-triage-agent@$PROJECT_ID.iam.gserviceaccount.com \
-  --role=roles/bigquery.dataViewer \
-  --project_id=$PROJECT_ID \
-  $DATASET
-
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member=serviceAccount:tracelayer-triage-agent@$PROJECT_ID.iam.gserviceaccount.com \
   --role=roles/bigquery.jobUser
+```
+
+Grant dataset-level read access to the Triage identity by updating the dataset access list. This keeps Compliance without BigQuery transaction read access.
+
+```bash
+bq show --format=prettyjson $PROJECT_ID:$DATASET > /tmp/tracelayer-bq-dataset.json
+
+jq '.access += [{
+  "role": "READER",
+  "userByEmail": "tracelayer-triage-agent@'"$PROJECT_ID"'.iam.gserviceaccount.com"
+}]' /tmp/tracelayer-bq-dataset.json > /tmp/tracelayer-bq-dataset-updated.json
+
+bq update --source /tmp/tracelayer-bq-dataset-updated.json $PROJECT_ID:$DATASET
 ```
 
 ## Gateway Layering

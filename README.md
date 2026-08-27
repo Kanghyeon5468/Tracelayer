@@ -145,7 +145,7 @@ gcloud agent-registry services create tracelayer-triage-agent \
   --location=$REGION \
   --display-name="TraceLayer Triage Agent" \
   --agent-spec-type=a2a-agent-card \
-  --agent-spec-content=@/tmp/tracelayer-triage-agent-card.json
+  --agent-spec-content=/tmp/tracelayer-triage-agent-card.json
 ```
 
 Identity separation is visible in the registry metadata and gateway audit events:

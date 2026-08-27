@@ -171,6 +171,7 @@ class AgentRegistry:
         )
         return {
             "schemaVersion": "v1",
+            "protocolVersion": "0.3.0",
             "name": agent.agent_id,
             "displayName": agent.display_name,
             "description": (
@@ -179,6 +180,8 @@ class AgentRegistry:
             ),
             "url": endpoint,
             "version": agent.version,
+            "defaultInputModes": ["text/plain", "application/json"],
+            "defaultOutputModes": ["text/plain", "application/json"],
             "provider": {"organization": "TraceLayer", "url": self.service_url or endpoint},
             "capabilities": {
                 "streaming": False,
@@ -199,6 +202,9 @@ class AgentRegistry:
                     "name": tool.replace("_", " ").title(),
                     "description": f"Approved TraceLayer tool exposed by {agent.display_name}.",
                     "tags": [agent.owner_department, agent.data_region, "fraud-investigation"],
+                    "examples": [
+                        f"Run {tool} for a suspicious transaction while preserving audit state."
+                    ],
                 }
                 for tool in agent.allowed_tools
             ],
@@ -224,7 +230,7 @@ class AgentRegistry:
                 f"--project={self.project_id} --location={self.region} "
                 '--display-name="TraceLayer Triage Agent" '
                 "--agent-spec-type=a2a-agent-card "
-                "--agent-spec-content=@/tmp/tracelayer-triage-agent-card.json"
+                "--agent-spec-content=/tmp/tracelayer-triage-agent-card.json"
             ),
             "iam_intent": [
                 {
