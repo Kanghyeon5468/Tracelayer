@@ -80,13 +80,13 @@ def test_random_demo_uses_flagged_demo_transactions(tmp_path: Path, monkeypatch)
         "tx-9801",
     }.issubset(set(demo_ids))
 
-    monkeypatch.setattr(fleet_module.random, "choice", lambda values: "tx-9201")
+    monkeypatch.setattr(fleet_module.random, "choice", lambda values: values[0])
     case = fleet.investigate_random_demo()
 
-    assert case.trigger_transaction_id == "tx-9201"
-    assert case.case_id.startswith("case-tx-9201-")
+    assert case.trigger_transaction_id in {"tx-9001", "tx-9101"}
+    assert case.case_id.startswith(f"case-{case.trigger_transaction_id}-")
     assert case.approval_request is not None
-    assert case.risk_score >= 70
+    assert case.risk_score in {98, 100}
 
 
 def test_random_demo_avoids_recent_demo_repeats(tmp_path: Path, monkeypatch) -> None:
@@ -105,30 +105,11 @@ def test_random_demo_avoids_recent_demo_repeats(tmp_path: Path, monkeypatch) -> 
 
     assert first_case.trigger_transaction_id == "tx-9001"
     assert second_case.trigger_transaction_id == "tx-9101"
-    assert third_case.trigger_transaction_id == "tx-9201"
+    assert third_case.trigger_transaction_id == "tx-9001"
     assert candidate_sets == [
-        [
-            "tx-9001",
-            "tx-9101",
-            "tx-9201",
-            "tx-9301",
-            "tx-9401",
-            "tx-9501",
-            "tx-9601",
-            "tx-9701",
-            "tx-9801",
-        ],
-        [
-            "tx-9101",
-            "tx-9201",
-            "tx-9301",
-            "tx-9401",
-            "tx-9501",
-            "tx-9601",
-            "tx-9701",
-            "tx-9801",
-        ],
-        ["tx-9201", "tx-9301", "tx-9401", "tx-9501", "tx-9601", "tx-9701", "tx-9801"],
+        ["tx-9001", "tx-9101"],
+        ["tx-9101"],
+        ["tx-9001"],
     ]
 
 

@@ -42,6 +42,7 @@ from app.domain.models import (
     RiskPolicy,
     Transaction,
 )
+from app.domain.policies import classify_transfer_amount
 from app.federation.engine import VeritasFederatedRiskEngine
 from app.gateway.agent_gateway import AgentGateway
 from app.memory.job_store import (
@@ -65,6 +66,9 @@ from app.security.policy import PolicyEngine
 
 class FraudInvestigationFleet:
     """Coordinates the local agent fleet for one investigation case."""
+
+    DEMO_CRITICAL_SCORE_FLOOR = 98
+    DEMO_EXCLUDED_TRANSACTION_IDS = {"tx-9701", "tx-9801"}
 
     def __init__(
         self,
@@ -362,6 +366,15 @@ class FraudInvestigationFleet:
         )
 
     def _choose_demo_transaction_id(self, transaction_ids: list[str]) -> str:
+        preferred_transaction_ids = [
+            transaction_id
+            for transaction_id in transaction_ids
+            if transaction_id not in self.DEMO_EXCLUDED_TRANSACTION_IDS
+            and self._estimated_demo_score(transaction_id) >= self.DEMO_CRITICAL_SCORE_FLOOR
+        ]
+        if preferred_transaction_ids:
+            transaction_ids = preferred_transaction_ids
+
         recent_transaction_ids: list[str] = []
         for case in self.memory_bank.list_cases():
             transaction_id = case.trigger_transaction_id
@@ -377,6 +390,28 @@ class FraudInvestigationFleet:
             candidates = transaction_ids
 
         return random.choice(candidates)
+
+    def _estimated_demo_score(self, transaction_id: str) -> int:
+        transaction = self.repository.get_transaction(transaction_id)
+        customer = self.repository.get_customer(transaction.customer_id)
+        score = 20
+        if classify_transfer_amount(transaction.amount) == "high":
+            score += 30
+        if transaction.country != customer.home_country:
+            score += 20
+        if transaction.channel == "wire":
+            score += 10
+        if "unusual_hour" in transaction.risk_flags:
+            score += 10
+        if "shared_device" in transaction.risk_flags or "shared_ip" in transaction.risk_flags:
+            score += 10
+
+        federated_score = self.federated_engine.score_transaction(transaction).federated_risk_score
+        if federated_score >= 80:
+            score += 15
+        elif federated_score >= 65:
+            score += 8
+        return min(score, 100)
 
     def enqueue_random_demo(
         self,
