@@ -6,6 +6,9 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+os.environ.setdefault("GOOGLE_API_USE_MTLS_ENDPOINT", "never")
+os.environ.setdefault("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
+
 from google.adk.agents import Agent
 
 TRACE_LAYER_API_BASE_URL = os.environ.get(
@@ -13,8 +16,6 @@ TRACE_LAYER_API_BASE_URL = os.environ.get(
     "https://tracelayer-api-235426782310.us-central1.run.app",
 ).rstrip("/")
 TRACE_LAYER_API_KEY = os.environ.get("TRACELAYER_API_KEY", "")
-
-os.environ.setdefault("GOOGLE_API_USE_MTLS_ENDPOINT", "never")
 
 
 def score_trace_layer_transaction(transaction_id: str = "tx-9001") -> dict[str, Any]:

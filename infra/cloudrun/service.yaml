@@ -32,6 +32,8 @@ spec:
               value: us
             - name: GOOGLE_API_USE_MTLS_ENDPOINT
               value: never
+            - name: GOOGLE_API_USE_CLIENT_CERTIFICATE
+              value: "false"
             - name: PUBLIC_SERVICE_URL
               value: https://tracelayer-api-235426782310.us-central1.run.app
             - name: TRIAGE_AGENT_ENGINE_RESOURCE
