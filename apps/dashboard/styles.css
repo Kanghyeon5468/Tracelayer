@@ -549,11 +549,11 @@ label {
   padding: 12px 28px 2px;
 }
 
-.progress-track::before {
+.progress-step:not(:last-child)::before {
   position: absolute;
-  top: 25px;
-  right: 72px;
-  left: 72px;
+  top: 24px;
+  left: 50%;
+  width: calc(100% + 18px);
   height: 2px;
   background: linear-gradient(90deg, rgba(103, 208, 106, 0.58), rgba(47, 147, 255, 0.65), rgba(255, 171, 56, 0.42));
   content: "";
@@ -573,6 +573,8 @@ label {
 }
 
 .progress-step span {
+  position: relative;
+  z-index: 1;
   display: inline-grid;
   width: 48px;
   height: 48px;
