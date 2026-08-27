@@ -1008,16 +1008,45 @@ const renderInvestigationProgress = (plan) => {
         { action: "request_supervisor_approval", status: "planned", agent_id: "case-manager-agent" },
       ];
 
-  progress.innerHTML = steps
-    .map(
-      (step) => `
+  progress.innerHTML = `
+    <svg class="progress-lines" aria-hidden="true"></svg>
+    ${steps
+      .map(
+        (step) => `
         <div class="progress-step ${step.status}">
           <span></span>
           <strong>${titleCase(step.action)}</strong>
           <p>${titleCase(step.status)} · ${titleCase(step.agent_id)}</p>
         </div>
       `,
-    )
+      )
+      .join("")}
+  `;
+  requestAnimationFrame(() => drawProgressConnectors(progress));
+};
+
+const drawProgressConnectors = (progress) => {
+  const svg = progress.querySelector(".progress-lines");
+  const nodes = [...progress.querySelectorAll(".progress-step span")];
+  if (!svg || nodes.length < 2) {
+    return;
+  }
+
+  const bounds = progress.getBoundingClientRect();
+  svg.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+  svg.setAttribute("width", String(bounds.width));
+  svg.setAttribute("height", String(bounds.height));
+  svg.innerHTML = nodes
+    .slice(0, -1)
+    .map((node, index) => {
+      const current = node.getBoundingClientRect();
+      const next = nodes[index + 1].getBoundingClientRect();
+      const x1 = current.left + current.width / 2 - bounds.left;
+      const y1 = current.top + current.height / 2 - bounds.top;
+      const x2 = next.left + next.width / 2 - bounds.left;
+      const y2 = next.top + next.height / 2 - bounds.top;
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
+    })
     .join("");
 };
 
@@ -1682,6 +1711,13 @@ window.addEventListener("storage", (event) => {
     }
   } catch (error) {
     setLiveStatus("Live sync: event skipped");
+  }
+});
+
+window.addEventListener("resize", () => {
+  const progress = document.querySelector("#investigation-progress");
+  if (progress) {
+    requestAnimationFrame(() => drawProgressConnectors(progress));
   }
 });
 
