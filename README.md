@@ -21,7 +21,7 @@ A bank can benefit from fraud patterns learned across a federation without seein
 
 | Area | Current Status |
 | --- | --- |
-| Cloud Run API | Deployed as `tracelayer-api`; direct browser access is private by design. |
+| Cloud Run API | Deployed as `tracelayer-api`; Public hackathon demo deployed on Cloud Run using synthetic data. Privileged routes remain protected by application-level authorization. |
 | Prompt Demo | `/demo` converts a human-written fraud scenario into synthetic transaction records, then runs the same agent fleet and live-syncs the result to the dashboard/admin consoles. |
 | Dashboard | `/dashboard` shows case summary, generated investigation plan, agent findings, ADK Runner metadata, privacy-separated federated risk, interactive 3D network graph, campaign detection, compliance, approval state, async job state, and Agent Registry. |
 | Admin Console | `/admin` lists pending approvals and approval history. Supervisors can approve, deny, request more evidence, and save risk thresholds. |
