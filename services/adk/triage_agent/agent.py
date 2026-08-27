@@ -14,6 +14,8 @@ TRACE_LAYER_API_BASE_URL = os.environ.get(
 ).rstrip("/")
 TRACE_LAYER_API_KEY = os.environ.get("TRACELAYER_API_KEY", "")
 
+os.environ.setdefault("GOOGLE_API_USE_MTLS_ENDPOINT", "never")
+
 
 def score_trace_layer_transaction(transaction_id: str = "tx-9001") -> dict[str, Any]:
     """Call the governed TraceLayer Triage invocation surface for one transaction."""
